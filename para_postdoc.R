@@ -1,6 +1,8 @@
 library(tidyverse)
 library(magrittr)
 library(lattice)
+library(readxl)
+library(brms)
 
 VR <- as_tibble(read.csv('censosPRI_SJ.csv', sep = ';', dec = ','))
 fruit_quality <- as_tibble(read.csv('fruit_qualityPRI_SJ.csv', sep = ';', dec = ','))
@@ -287,9 +289,11 @@ prior_modelo <- c(set_prior('normal(14, 2)', class = 'b'),
 
 mod_fru <- brm(formula = modelo, data = df, family = gaussian,
                prior = prior_modelo,
-               warmup = 1500, future = T, chains = 3, iter = 10000, thin = 3)
+               warmup = 1500, future = T, chains = 3, iter = 15000, thin = 3)
 
 summary(mod_fru)
+saveRDS(mod_fru, 'mod_catPOLL.rds')
+mod_fru <- readRDS('mod_catPOLL.rds')
 
 
 post_fru <- as_draws_df(mod_fru)[,2:15]
@@ -449,5 +453,6 @@ sanJ |>
   theme(panel.grid = element_blank(),
         legend.position = 'none',
         text = element_text(family = 'Times New Roman'))
+
 
 
