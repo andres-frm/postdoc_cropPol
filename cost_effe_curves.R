@@ -1,6 +1,59 @@
-
-pks <- c('tidyverse', 'rethinking', 'rstan', 'magrittr')
+pks <- c('tidyverse', 'rethinking', 'rstan', 'magrittr', 'cmdstanr',
+         'ggdag', 'dagitty')
 sapply(pks, library, character.only = T)
+
+
+sim_mod <- 
+  dagify(Y ~ FW + nF, 
+         nF ~ FloD + Pfs, 
+         FW ~ PollD,
+         Pfs ~ nVis,
+         PollD ~ nVis + wild,
+         nVis ~ apis + percF, 
+         apis ~ BHd + apisN,
+         BHd ~ BHs,
+         exposure = 'BHd', 
+         outcome = 'Y')
+
+coordinates(sim_mod) <- 
+  list(
+    y = c(BHs = 0, BHd = 0, apis = 0, 
+          apisN = 1,  nVis = 0, PollD = -1, wild = -2, Pfs = 1,
+          nF = 1, FW = -1, FloD = 2, Y = 0, percF = 1), 
+    
+    x = c(BHs = 1, BHd = 2, apis = 3, 
+          apisN = 3,  nVis = 4, PollD = 5, wild = 5, Pfs = 5, 
+          nF = 6, FW = 6, FloD = 6, Y = 7, percF = 4)
+  )
+
+labels <- tibble(lab = c('Pre-pollination', 'Pollination', 'Production'), 
+                 x = c(2, 4.5, 6.5), 
+                 y = rep(2.75, 3))
+
+ggdag(sim_mod) +
+  geom_rect(aes(xmin = 0.5, xmax = 3.5, ymin = -2.5, ymax = 2.5), 
+            fill = 'tan1', alpha = 0.01) +
+  geom_rect(aes(xmin = 3.5, xmax = 5.5, ymin = -2.5, ymax = 2.5), 
+            fill = 'lightpink', alpha = 0.01) +
+  geom_rect(aes(xmin = 5.5, xmax = 7.5, ymin = -2.5, ymax = 2.5), 
+            fill = 'blue4', alpha = 0.01) +
+  annotate(geom = 'text', x = labels$x, y = labels$y, label = labels$lab) +
+  geom_dag_node(color = 'lightblue') +
+  geom_dag_text(color = 'black') +
+  theme_classic() +
+  theme(axis.line = element_blank(), 
+        axis.text = element_blank(), 
+        axis.ticks = element_blank(), 
+        axis.title = element_blank())
+
+
+time_visit <- rgamma(2e3, 
+                     shape = (17^2)/7, 
+                     rate = 17/7)
+
+perc_activity <- rbeta(1e3, 7, 4) # proportion of day time invested foraging
+
+
 
 
 x <- seq(0,120, 1)

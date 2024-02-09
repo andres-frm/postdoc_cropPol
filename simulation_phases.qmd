@@ -1,0 +1,276 @@
+---
+title: "Blueberry pollination: phases of the simulation study"
+author: "Ramírez-Mejía, A. F."
+format: 
+  html:
+    theme: 
+      light: journal
+      dark: [journal, theme-dark.scss]
+    toc: true
+    toc-depth: 10
+    toc-expand: 10
+    toc-title: "Tabla de contenido"
+    toc-location: left
+    embed-resources: true
+number-sections: false
+number-depth: 10
+editor: visual
+date-format: full 
+date-modified: now
+mainfont: Times New Roman
+code-fold: false
+code-overflow: scroll
+code-line-numbers: true
+code-copy: true
+---
+
+```{r, echo=FALSE}
+#knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#| warning: false
+#| message: false
+#| results: hide
+
+pks <- c('ggdag', 'dagitty', 'ggplot2', 'tibble')
+
+sapply(pks, library, character.only = T)
+
+```
+
+
+# 1. Research problem
+
+Farmers of pollinator-dependent crops routinely implement 
+precise protocols for applying fertilizers, herbicides or pesticides, managing 
+irrigation system or planing pruning. In contrast, despite animal pollination being 
+crucial for plant reproduction and flowers setting fruit, the management tend to be 
+based on rule of thumb guides (e.g. beehive densities) that do not consider contingencies 
+regarding the spatial context, mating system of the crop and pollination effectiveness of 
+each species. Such fuzziness for managing pollination service increases the uncertainty 
+about the actual contribution of pollinators to crop productivity. That is, traditional 
+pollination management do not provide answers to: *how many bees (beehives) do a farmer need
+to reach optimal pollination levels and maximize the production?*
+
+
+Our main goal is developing a stochastic simulation model based on empirical evidence to recreate 
+pollination process in blueberry crops considering: current levels of pollination, 
+beehive density, spatial arrangement of hives, honeybee abundance and visitation rate, 
+flowers density, pollen deposition in flowers and fruit development. 
+
+# 2. Solution techniques
+
+We will use, mostly, empirical data collected in blueberry crops from Argentina to fit 
+Bayesian models and use posterior distributions for the parametrization of the simulation
+model. We will also use literature information for representing, for instance, beehive
+population. All programming and simulation process will be conducted in `R 4.3.1`.
+
+# 3. System and model conceptualization
+
+Our study system will be the blueberry crop. We use this species sin it is highly dependent on 
+animal pollination to guarantee that flowers set fruit, and because it constitute 
+and ideal system to assess the cascading process affecting the pollination service.
+
+```{r, fig.cap='Flow chart illustrating the cascading proces affecting yield of blueberry crops', fig.align='center', echo=FALSE}
+
+sim_mod <- 
+  dagify(Y ~ FW + nF, 
+         nF ~ FloD + Pfs, 
+         FW ~ PollD,
+         Pfs ~ nVis,
+         PollD ~ nVis + wild,
+         nVis ~ apis + percF, 
+         apis ~ BHd + apisN,
+         BHd ~ BHs,
+         exposure = 'BHd', 
+         outcome = 'Y')
+
+coordinates(sim_mod) <- 
+  list(
+    y = c(BHs = 0, BHd = 0, apis = 0, 
+          apisN = 1,  nVis = 0, PollD = -1, wild = -2, Pfs = 1,
+          nF = 1, FW = -1, FloD = 2, Y = 0, percF = 1), 
+    
+    x = c(BHs = 1, BHd = 2, apis = 3, 
+          apisN = 3,  nVis = 4, PollD = 5, wild = 5, Pfs = 5, 
+          nF = 6, FW = 6, FloD = 6, Y = 7, percF = 4)
+  )
+
+labels <- tibble(lab = c('Pre-pollination', 'Pollination', 'Production'), 
+                 x = c(2, 4.5, 6.5), 
+                 y = rep(2.75, 3))
+
+ggdag(sim_mod) +
+  geom_rect(aes(xmin = 0.5, xmax = 3.5, ymin = -2.5, ymax = 2.5), 
+            fill = 'tan1', alpha = 0.01) +
+  geom_rect(aes(xmin = 3.5, xmax = 5.5, ymin = -2.5, ymax = 2.5), 
+            fill = 'lightpink', alpha = 0.01) +
+  geom_rect(aes(xmin = 5.5, xmax = 7.5, ymin = -2.5, ymax = 2.5), 
+            fill = 'blue4', alpha = 0.01) +
+  annotate(geom = 'text', x = labels$x, y = labels$y, label = labels$lab) +
+  geom_dag_node(color = 'lightblue') +
+  geom_dag_text(color = 'black') +
+  theme_classic() +
+  theme(axis.line = element_blank(), 
+        axis.text = element_blank(), 
+        axis.ticks = element_blank(), 
+        axis.title = element_blank())
+
+```
+
+:::{}
+
+-   `BHs`: beehive strength (number of foraging individuals per hive).
+-   `BHd`: beehive density (number of hives per ha).
+-   `apis`: Honeybee total abundance.
+-   `apisN`: Feral honeybees.
+-   `nVis`: Total visits to blueberry flowers.
+-   `percF`: Bloom percentage.
+-   `Pfs`: Probability of flowers setting fruit.
+-   `PollD`: Pollen deposition (pollen grains deposited after N visits).
+-   `wild`: Wild pollinators abundance.
+-   `nF`: number of flowers per bush (depends on flowering percentage).
+-   `FloD`: number of flowers per ha (depends on flowering percentage).
+-   `Y`: yield ($kg~ha^{-1}$), results from the sum of production per plant.
+-   `FW`: Fruit weight (g) predicted from pollen deposition.
+
+:::
+
+The variables can change depending on the source and way we are planing to estimate the 
+parameters or how the simulations will be programmed. Those variables (or parameters) can be 
+classified as *prior estimator*, *posterior estimator* and *single-point estimator*. 
+By *posterior estimator* I mean a random variable whose values comes from a prior 
+probability distribution parametrized using literature data. *Posterior estimator* denotes 
+a random variable (or parameter in deterministic functions) whose values were estimated 
+through Bayesian models fitted to empirical data. Finally, *single-point estimator* are 
+fixed values for certain parameters in the simulations.
+
+**Prior estimators**: 
+
+:::{}
+
+*   `BHs`. (e.g. $Apis~population^{hive} \sim poisson(\lambda)$).
+                        
+*   `apis`. It is the additive result of `BHd` and `apisN`.
+                        
+*   `nVis`. Part of this estimation depends on $visits^{-min} \sim poisson(\lambda)$.
+
+:::
+
+
+**Posterior estimator**: 
+
+:::{}
+*   `Pfs`. Estimated with data from [Kendall et all. 2020](https://besjournals.onlinelibrary.wiley.com/doi/full/10.1111/1365-2664.13751)
+                        
+*   `PollD`. Estimated value from deterministic function (whose parameters are posteriors).
+                        
+*   `FW`. We will use $\mu_{fruit~size} = \alpha + \beta_{pollen^2} +\beta_{pollen}$, then we will fit other model to estimate the slope of the correlation *size ~ weight*.
+
+*   `nF`. Depending on the simulations programming, it can be a *single-point estimator*. Yet, it can also be represented as random values from $flowers^{-plant} \sim poisson(\lambda)$. The posteriot probability of parameter $\lambda$ would be estimated Bayesian approach and SURPASS data.
+
+*   `wild`. Pollen deposition comes from deterministic function (whose parameters are posteriors).
+
+:::
+
+**Single-point estimator**:
+
+:::{}
+*   `BHd`. Different fixed values for each simulation.
+
+*   `apisN`. Fixed starting value from [Ramirez-Mejia et al. 2023](https://besjournals.onlinelibrary.wiley.com/doi/full/10.1111/1365-2664.14553) (only farms without beehives).
+
+*   `wild`. Fixed abundance values from [Ramirez-Mejia et al. 2023](https://www.sciencedirect.com/science/article/abs/pii/S0167880922003784) and [Ramirez-Mejia et al. 2023](https://besjournals.onlinelibrary.wiley.com/doi/full/10.1111/1365-2664.14553).
+
+*   `Y`. Number of plants per ha and flowers per plant
+
+*   `FloD`. Number of plants per ha and flowers per plant
+
+*   `percF`. Fixed value per simulation. 
+
+:::
+
+
+# 4. Model representation 
+
+Let me explain how the initial data will be generated:
+
+### `BHs` (beehive strength)
+
+First we have to gather data on honeybees population size in hives of type X (e.g., literature and excerpt knowledge). Then define 
+low medium or high quality hives depending on the minimum and maximum values for this type of hives, and asign a probability distribution that describe each level of quality:
+
+
+$$
+\begin{aligned}
+
+Behive~strength_{quality~i} \sim poisson(\lambda)~~~~~o \\
+Behive~strength_{quality~i} \sim NegBinom(\mu, \sigma)
+
+\end{aligned}
+$$
+
+
+### `BHd` (beehive density)
+
+Using reference values, from 1 to 25 $hives^{-ha}$, an generate as much as random values of `BHs` as hives are simulated per ha. That is:
+
+
+$$
+\begin{aligned}
+
+Total~honeybees = \sum hive_i \sim NegBinom(\mu = Behive~strength_{quality~i}, ~\sigma)
+
+\end{aligned}
+$$
+
+### `apis` (managed honeybees) and `apisN` (feral honeybees)
+
+We can consider feral honeybees as a fraction of the total contributed by beehives. For instance:
+
+```{r}
+
+hive_ha <- 15 # hives per ha
+
+set.seed(1)
+(beehive_strength <- rnbinom(hive_ha, 
+                            size = 2, 
+                            mu = 5e3)) # assume 5000 honeybees per hive
+
+(hive_bees <- sum(beehive_strength)) # managed bees
+
+(feral_pop <- (quantile(1:hive_bees, 0.1))) # lest assume that feral honeybee population 
+                                            # is about a 10% of the managed population
+
+(total_bees <- hive_bees + feral_pop)
+
+```
+
+
+### `nVis` (number of honeybee visits)
+
+The number of visits depends on how many flowers can visit a honeybee per unit of time. To estimate this value, 
+we can fit a model describing the time invested by each pollinator in a single floral visits (**chapter III of my PhD thesis**). We will use the model to simulate visit times (s) and add the values up to 1 min. Then we can estimate the number of flowers that a honeybee could visit during a single day if the bee does not rest or return to the hive. *Finally, we will use secondary data to estimate the percentage of daily activity that a bee invest foraging (we can use a beta distribution)*, and use it to estimate a more accurate value from the total possible visits. Lets see an example:
+
+```{r}
+
+time_visit <- rgamma(2e3, 
+                     shape = (17^2)/7, 
+                     rate = 17/7)
+
+perc_activity <- rbeta(1e3, 7, 4) # proportion of day time invested foraging
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
