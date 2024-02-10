@@ -81,19 +81,20 @@ sim_mod <-
          Pfs ~ nVis,
          PollD ~ nVis + wild,
          nVis ~ apis + percF, 
-         apis ~ BHd + apisN,
+         apis ~ propF + apisN + timeF,
          BHd ~ BHs,
+         propF ~ BHs + BHd,
          exposure = 'BHd', 
          outcome = 'Y')
 
 coordinates(sim_mod) <- 
   list(
-    y = c(BHs = 0, BHd = 0, apis = 0, 
-          apisN = 1,  nVis = 0, PollD = -1, wild = -2, Pfs = 1,
+    y = c(BHs = 1, propF = 0, BHd = -1, apis = 0, 
+          apisN = 1, timeF = -1,  nVis = 0, PollD = -1, wild = -2, Pfs = 1,
           nF = 1, FW = -1, FloD = 2, Y = 0, percF = 1), 
     
-    x = c(BHs = 1, BHd = 2, apis = 3, 
-          apisN = 3,  nVis = 4, PollD = 5, wild = 5, Pfs = 5, 
+    x = c(BHs = 1, propF = 2, BHd = 1, apis = 3, 
+          apisN = 3,  timeF = 3, nVis = 4, PollD = 5, wild = 5, Pfs = 5, 
           nF = 6, FW = 6, FloD = 6, Y = 7, percF = 4)
   )
 
@@ -123,7 +124,9 @@ ggdag(sim_mod) +
 
 -   `BHs`: beehive strength (number of foraging individuals per hive).
 -   `BHd`: beehive density (number of hives per ha).
+-   `propF`: proportion of foraging bees per hive.
 -   `apis`: Honeybee total abundance.
+-   `timeF`: daily time invested.
 -   `apisN`: Feral honeybees.
 -   `nVis`: Total visits to blueberry flowers.
 -   `percF`: Bloom percentage.
@@ -151,6 +154,10 @@ fixed values for certain parameters in the simulations.
 :::{}
 
 *   `BHs`. (e.g. $Apis~population^{hive} \sim poisson(\lambda)$).
+
+*   `propF`. $proportion~foragers_{hive~i} \sim Beta(\tau_1, \tau_2)$
+
+*   `timeF`. Fraction of the day invested in foraging trips. 
                         
 *   `apis`. It is the additive result of `BHd` and `apisN`.
                         
@@ -179,9 +186,9 @@ fixed values for certain parameters in the simulations.
 :::{}
 *   `BHd`. Different fixed values for each simulation.
 
-*   `apisN`. Fixed starting value from [Ramirez-Mejia et al. 2023](https://besjournals.onlinelibrary.wiley.com/doi/full/10.1111/1365-2664.14553) (only farms without beehives).
+*   `apisN`. Fixed starting value from [Ramirez-Mejia et al. (2023)](https://besjournals.onlinelibrary.wiley.com/doi/full/10.1111/1365-2664.14553) (only farms without beehives).
 
-*   `wild`. Fixed abundance values from [Ramirez-Mejia et al. 2023](https://www.sciencedirect.com/science/article/abs/pii/S0167880922003784) and [Ramirez-Mejia et al. 2023](https://besjournals.onlinelibrary.wiley.com/doi/full/10.1111/1365-2664.14553).
+*   `wild`. Fixed abundance values from [Ramirez-Mejia et al. (2023)](https://www.sciencedirect.com/science/article/abs/pii/S0167880922003784) and [Ramirez-Mejia et al. (2023)](https://besjournals.onlinelibrary.wiley.com/doi/full/10.1111/1365-2664.14553).
 
 *   `Y`. Number of plants per ha and flowers per plant
 
@@ -198,23 +205,24 @@ Let me explain how the initial data will be generated:
 
 ### `BHs` (beehive strength)
 
-First we have to gather data on honeybees population size in hives of type X (e.g., literature and excerpt knowledge). Then define 
-low medium or high quality hives depending on the minimum and maximum values for this type of hives, and asign a probability distribution that describe each level of quality:
+First we have to gather data on honeybees population size in hives of type X (e.g., literature and excerpt knowledge). Then define low medium or high quality hives depending on the minimum and maximum values for this type of hives, and asing a probability distribution that describe each level of quality. For instance, 
+*[Geslin et al. (2017)](https://www.sciencedirect.com/science/article/abs/pii/S016788091730333X) work with
+low (11000 individuals) and high quality hives (20000 individuals), at a rental price per colony of 20 US$
+for high quality and 5 US$ for conventional. See also Figure 2 of [Chabert et al. (2021)](https://www.sciencedirect.com/science/article/pii/S1470160X20312553) to support those population sizes in *Langstroth* hives*. 
 
 
 $$
 \begin{aligned}
 
-Behive~strength_{quality~i} \sim poisson(\lambda)~~~~~o \\
-Behive~strength_{quality~i} \sim NegBinom(\mu, \sigma)
+Behive~strength_{quality~i} \sim NegBinom(\sigma, \mu)
 
 \end{aligned}
 $$
 
-
 ### `BHd` (beehive density)
 
-Using reference values, from 1 to 25 $hives^{-ha}$, an generate as much as random values of `BHs` as hives are simulated per ha. That is:
+Using reference values, *from 1 to 25 $hives^{-ha}$ ([Rolling and Garibaldi (2018)](https://besjournals.onlinelibrary.wiley.com/doi/full/10.1111/1365-2664.13355))*, an generate as much as random values of `BHs` as hives are simulated per ha.  
+That is:
 
 
 $$
@@ -225,28 +233,144 @@ Total~honeybees = \sum hive_i \sim NegBinom(\mu = Behive~strength_{quality~i}, ~
 \end{aligned}
 $$
 
+Let see an example with code:
+
+```{r}
+hive_ha <- 15 # hives per ha
+
+set.seed(1)
+(beehive_strength <- rnbinom(hive_ha, size = 10, mu = 1e4)) # assume low quality hives
+```
+
+
+### `propF` (proportion of foraging individuals per hive)
+
+The proportion of foraging bees within the hive depends on the hive size, resources demand 
+and availability. Here we use literature data to represent it in form of probability 
+distribution. *Here, we will follow [Seeley (1983)](https://www.jstor.org/stable/4599586) who 
+found that between 22 to 40% of bees following waggle dances do foraging trees. So here, by the moment, I
+will assume that around 40% of the colony is available to visiting flowers*. Let see it in code:
+
+```{r}
+set.seed(1)
+prop_foragers <- rbeta(hive_ha, 4.5, 8)
+```
+
+### `timeF` (foraging time)
+
+First of all, lets assume eight daily hours of pollination activity ([Garibaldi et al. 2020](https://besjournals.onlinelibrary.wiley.com/doi/full/10.1111/1365-2664.13574)). Then, I am 
+will estimate the daily time invested during foraging trips by each honeybee using the values 
+reported by [Eckert et al. (1994)](https://www.jstor.org/stable/4220612) (Table 3):
+
+
+
+__*Hives with large populations (35000 ± 1700 workers)*__
+
+:::{}
+
+*Time of a single foraging trip (s)*
+
+*   Nectar foragers =  1667.7 ± 126.4
+*   Pollen foragers =  2683.9 ± 250.7
+
+
+
+$$foraging~trip \sim Normal(\mu = \frac{1667.7+2686.9}{2}, ~\sigma = \frac{126.4+250.7}{2})$$
+
+*Trip frequency (trips/90 min)*
+
+*   Nectar foragers =  1.23 ± 0.06 (s)
+*   Pollen foragers =  1.21 ± 0.15 (s)
+
+$$trip~frequency \sim Normal(\mu = \frac{1.23+1.21}{2}, ~\sigma = \frac{0.06+0.15}{2})$$
+
+:::
+
+
+__*Hives with small populations (10000 ± 500 workers)*__
+
+:::{}
+
+*Time of a single foraging trip (s)*
+
+*   Nectar foragers =  1210.8 ± 157.6
+*   Pollen foragers =  1680.4 ± 212.6
+
+$$foraging~trip \sim Normal(\mu = \frac{1210.8+1680.4}{2}, ~\sigma = \frac{157.6+212.6}{2})$$
+
+*Trip frequency (trips/90 min)*
+
+*   Nectar foragers =  1 ± 0.00 (s)
+*   Pollen foragers =  1.41 ± 0.16 (s)
+
+$$trip~frequency \sim Normal(\mu = \frac{1+1.4}{2}, ~\sigma = \frac{0+0.16}{2})$$
+
+:::
+
+lets explain how those values are integrated to estimate a probability distribution 
+describing the available daily time that each bee in the colony will spend 
+for actively visiting flowers:
+
+```{r}
+
+trip_frequency_LQ <- rnorm(2e3, 
+                           mean(c(1, 1.4)), 
+                           mean(c(0, 0.16))) # low quality hives
+
+trip_span_LQ <- rnorm(2e3, 
+                      mean(c(1210.8, 1680.4)), 
+                      mean(c(157.6, 212.6))) # low quality hives
+
+trips_bee_LQ <- trip_frequency_LQ * ((8*60)/90) # number of trips per day
+
+foraging_time <- trip_span_LQ * trips_bee_LQ # foraging time in seconds
+
+par(mfrow = c(2, 2))
+
+plot(density(trip_frequency_LQ), main = '',
+     xlab = 'Number of foraging trips (trips/90 min)')
+
+plot(density(trip_span_LQ/60), main = '',
+     xlab = 'Trip span (min)')
+
+plot(density(trips_bee_LQ), main = '',
+     xlab = 'Daily trip per bee (min)')
+
+plot(density((foraging_time/60)/60), main = '',
+     xlab = 'Daily foraging time per bee (h)')
+
+par(mfrow = c(1, 1))
+
+```
+
 ### `apis` (managed honeybees) and `apisN` (feral honeybees)
 
 We can consider feral honeybees as a fraction of the total contributed by beehives. For instance:
 
 ```{r}
 
-hive_ha <- 15 # hives per ha
-
-set.seed(1)
-(beehive_strength <- rnbinom(hive_ha, 
-                            size = 2, 
-                            mu = 5e3)) # assume 5000 honeybees per hive
-
-(hive_bees <- sum(beehive_strength)) # managed bees
-
-(feral_pop <- (quantile(1:hive_bees, 0.1))) # lest assume that feral honeybee population 
-                                            # is about a 10% of the managed population
-
-(total_bees <- hive_bees + feral_pop)
+(feral_pop <- (quantile(1:sum(beehive_strength), 0.1))) # lest assume that feral honeybee population 
+                                                        # is about a 10% of the managed population
 
 ```
 
+and the populations of our 15 hives
+
+```{r}
+beehive_strength
+```
+
+But! Remember that not all the workers in a hive are actually able to forage. Therefore:
+
+```{r}
+
+set.seed(1)
+foragers_bees <- round(beehive_strength * sample(prop_foragers, hive_ha))
+foragers_bees
+```
+
+Now, we will use all data above to calculate the number of visits that each bee 
+will make during the day.
 
 ### `nVis` (number of honeybee visits)
 
@@ -259,8 +383,59 @@ time_visit <- rgamma(2e3,
                      shape = (17^2)/7, 
                      rate = 17/7)
 
-perc_activity <- rbeta(1e3, 7, 4) # proportion of day time invested foraging
+```
 
+We will use this distribution to estimate the number of visits that each bee 
+will make during the day. This time we will simulate only the first hive
+
+```{r}
+
+foraging_time <- sample(foraging_time, foragers_bees[1], T)
+
+t1 <- Sys.time()
+visits_bee <- 
+  sapply(1:foragers_bees[1], FUN = 
+           function(x) {
+             
+             time <- 0
+             vis <- 0
+             
+             while (time < foraging_time[[x]]) {
+               time <- time + sample(time_visit, 1)
+               vis <- vis + 1
+             }
+             
+             vis
+             
+           })
+Sys.time() - t1
+
+plot(density(visits_bee), main = 'x', xlab = 'Number of floral visits of a single bee per day')
+
+
+# this is an alternative way 
+
+# time <- vector('double', length = 1)
+# vis <- 0
+# 
+# visits_bee <- vector('double', beehive_strength[1])
+# 
+# foraging_time <- sample(foraging_time, beehive_strength[1], T)
+# 
+# t1 <- Sys.time()
+# for (i in 1:beehive_strength[1]) {
+#   
+#   time <- 0
+#   vis <- 0
+#   
+#   while (time < foraging_time[[i]]) {
+#     time <- time + sample(time_visit, 1)
+#     vis <- vis + 1
+#   }
+#   
+#   visits_bee[[i]] <- vis
+# }
+# Sys.time() - t1
 
 ```
 
