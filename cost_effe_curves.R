@@ -10,19 +10,20 @@ sim_mod <-
          Pfs ~ nVis,
          PollD ~ nVis + wild,
          nVis ~ apis + percF, 
-         apis ~ BHd + apisN,
+         apis ~ propF + apisN + timeF,
          BHd ~ BHs,
+         propF ~ BHs + BHd,
          exposure = 'BHd', 
          outcome = 'Y')
 
 coordinates(sim_mod) <- 
   list(
-    y = c(BHs = 0, BHd = 0, apis = 0, 
-          apisN = 1,  nVis = 0, PollD = -1, wild = -2, Pfs = 1,
+    y = c(BHs = 1, propF = 0, BHd = -1, apis = 0, 
+          apisN = 1, timeF = -1,  nVis = 0, PollD = -1, wild = -2, Pfs = 1,
           nF = 1, FW = -1, FloD = 2, Y = 0, percF = 1), 
     
-    x = c(BHs = 1, BHd = 2, apis = 3, 
-          apisN = 3,  nVis = 4, PollD = 5, wild = 5, Pfs = 5, 
+    x = c(BHs = 1, propF = 2, BHd = 1, apis = 3, 
+          apisN = 3,  timeF = 3, nVis = 4, PollD = 5, wild = 5, Pfs = 5, 
           nF = 6, FW = 6, FloD = 6, Y = 7, percF = 4)
   )
 
@@ -46,15 +47,62 @@ ggdag(sim_mod) +
         axis.ticks = element_blank(), 
         axis.title = element_blank())
 
+hive_ha <- 15
 
 time_visit <- rgamma(2e3, 
-                     shape = (17^2)/7, 
-                     rate = 17/7)
+                     shape = (17^2)/8, 
+                     rate = 17/8)
+plot(density(time_visit))
 
-perc_activity <- rbeta(1e3, 7, 4) # proportion of day time invested foraging
+prop_foragers <- rbeta(1e3, 4.5, 8)
+plot(density(rbeta(1e3, 4.5, 8)))
+
+beehive_strength <- rnbinom(hive_ha, size = 10, mu = 1e4)
+
+time <- vector('double', length = 1)
+vis <- 0
+
+visits_bee <- vector('double', beehive_strength[1])
+
+foraging_time <- sample(foraging_time, beehive_strength[1], T)
+
+t1 <- Sys.time()
+for (i in 1:beehive_strength[1]) {
+  
+  time <- 0
+  vis <- 0
+  
+  while (time < foraging_time[[i]]) {
+    time <- time + sample(time_visit, 1)
+    vis <- vis + 1
+  }
+  
+  visits_bee[[i]] <- vis
+}
+Sys.time() - t1
 
 
+plot(density(visits_bee))
 
+t1 <- Sys.time()
+visits_bee <- 
+  sapply(1:beehive_strength[1], FUN = 
+           function(x) {
+             
+             time <- 0
+             vis <- 0
+             
+             while (time < foraging_time[[x]]) {
+               time <- time + sample(time_visit, 1)
+               vis <- vis + 1
+             }
+             
+             vis
+             
+           })
+Sys.time() - t1
+
+plot(density(visits_bee))
 
 x <- seq(0,120, 1)
 #y <- 250/(1+18*exp(-1*x))
