@@ -208,7 +208,8 @@ Let me explain how the initial data will be generated:
 First we have to gather data on honeybees population size in hives of type X (e.g., literature and excerpt knowledge). Then define low medium or high quality hives depending on the minimum and maximum values for this type of hives, and asing a probability distribution that describe each level of quality. For instance, 
 *[Geslin et al. (2017)](https://www.sciencedirect.com/science/article/abs/pii/S016788091730333X) work with
 low (11000 individuals) and high quality hives (20000 individuals), at a rental price per colony of 20 US$
-for high quality and 5 US$ for conventional. See also Figure 2 of [Chabert et al. (2021)](https://www.sciencedirect.com/science/article/pii/S1470160X20312553) to support those population sizes in *Langstroth* hives*. 
+for high quality and 5 US$ for conventional. See also Figure 2 of [Chabert et al. (2021)](https://www.sciencedirect.com/science/article/pii/S1470160X20312553) to support those population sizes in *Langstroth* hives*; and [Grant et al (2021)](https://pubmed.ncbi.nlm.nih.gov/34395063/) for honeybee hives populations ranging between 
+10300 to 30700.
 
 
 $$
