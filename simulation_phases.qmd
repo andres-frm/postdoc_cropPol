@@ -236,7 +236,7 @@ $$
 Let see an example with code:
 
 ```{r}
-hive_ha <- 15 # hives per ha
+hive_ha <- 25 # hives per ha
 
 set.seed(1)
 (beehive_strength <- rnbinom(hive_ha, size = 10, mu = 1e4)) # assume low quality hives
@@ -253,7 +253,7 @@ will assume that around 40% of the colony is available to visiting flowers*. Let
 
 ```{r}
 set.seed(1)
-prop_foragers <- rbeta(hive_ha, 4.5, 8)
+prop_foragers <- rbeta(hive_ha, 5.5, 8)
 ```
 
 ### `timeF` (foraging time)
@@ -386,64 +386,180 @@ time_visit <- rgamma(2e3,
 ```
 
 We will use this distribution to estimate the number of visits that each bee 
-will make during the day. This time we will simulate only the first hive
+will make during the day. First, we will create a function to generate the random values that, later, will be used for simulating the total visits to the cop flowers
 
 ```{r}
 
-foraging_time <- sample(foraging_time, foragers_bees[1], T)
+N_foraging_trips <- 
+  
+  function(iter, # bees per hive 
+           time_foragin, # effective time to forage during the day (in s)
+           time_per_visit) { # posterior distribution of time spend per visit
+    
+    time_foragin <- sample(time_foragin, iter, T)
+    
+    t1 <- Sys.time()
+    visits_bee <- 
+      sapply(1:iter, FUN = 
+               function(x) {
+                 
+                 time <- 0
+                 vis <- 0
+                 
+                 while (time < time_foragin[[x]]) { 
+                   # while the bee does not surpass their time 
+                   # available for foraging
+                   time <- time + sample(time_per_visit, 1) # visits of random time (s)
+                   vis <- vis + 1
+                 }
+                 
+                 vis
+                 
+               })
+    message(paste('Execution time', Sys.time() - t1))
+    
+    return(visits_bee)
+    
+  }
 
 t1 <- Sys.time()
-visits_bee <- 
-  sapply(1:foragers_bees[1], FUN = 
-           function(x) {
+visits_day <- N_foraging_trips(iter = 2e4, 
+                               time_foragin = foraging_time, 
+                               time_per_visit = time_visit)
+Sys.time() - t1
+
+```
+
+Here, we have simulated the number of visits per visit during a single day. Now 
+we have to simulate the plants, their flowers and we must define a flowering percentage
+for the plot.
+
+First, lets simulate 1 ha of blueberry (cultivar Emerald). I will follow the plantation densities used in Citromax farms in Tucumán. Then, I will replicate the simulated 
+flowering visits to the crop if only one low-quality hive is located within the crop. 
+*Here, we assume (i) 2 days as the maximum receptivity period of flowers,  
+$flowers_{plant} \sim Normal(\mu=4000, ~ \sigma=500)$, and 
+$flowering~percentage \sim beta(\tau_1=6, ~\tau_2=4)$ (~60%).*
+
+```{r}
+p_01ha <- round((1501* # plants of emerald per ha (2011 in Citromax)
+                  1)/0.45)
+
+plot(density(rnorm(1e3, 4e3, 500)), main = '', xlab = 'Flowers per blueberry bush') 
+
+set.seed(1)
+plants <- round(rnorm(p_01ha, 5e3, 500)) # plantas with random floral display
+
+plot(density(rbeta(1e3, 6, 4)), 
+     main = '', xlab = 'Flowering percentage per bush')
+
+set.seed(1)
+flowering_perc <- rbeta(p_01ha, 6, 4)
+
+plants <- round(plants * flowering_perc) # adjust number of flowers according the
+                                         # flowering percentage
+
+plants <- lapply(plants, FUN = 
+                   function(x) {
+                     rep(0, x) # Plants with individual flowers
+                   })
+
+names(plants) <- paste('plant', 1:p_01ha, sep = '')
+```
+
+Now, we prepare the number of visits that each bee can conduct during the day
+
+```{r}
+foragers_visits <- lapply(foragers_bees, FUN = 
+                            function(x) {
+                              sample(visits_day, x, replace = T)
+                            })
+
+unlist(lapply(foragers_visits, sum)) # total floral visits from 
+                                     # each hive in a single day
+length(plants) # plants per ha
+```
+
+Lets simulate!
+
+```{r, echo=TRUE, eval=FALSE}
+
+t1 <- Sys.time()
+plants <- 
+  lapply(foragers_visits, FUN = 
+           function(colmena) {
              
-             time <- 0
-             vis <- 0
+             set.seed(1)
+             plants <- round(rnorm(p_01ha, 5e3, 500))
              
-             while (time < foraging_time[[x]]) {
-               time <- time + sample(time_visit, 1)
-               vis <- vis + 1
+             plants <- round(plants * flowering_perc)
+             
+             plants <- lapply(plants, FUN = 
+                                function(x) {
+                                  rep(0, x)
+                                })
+             
+             names(plants) <- paste('plant', 1:p_01ha, sep = '')
+             
+             
+             for (k in 1:2) { # number of pollination days (blueberry days receptivity)
+               message(paste('Starting day', k, 'of pollination'))
+               
+               for (j in seq_along(colmena)) { # bees on beehive 
+                 
+                 for (i in 1:colmena[j]){ # foraging trips per bee
+                   
+                   plant_i <- sample(1:length(plants), 1) # plant i
+                   
+                   flower_i <- sample(1:length(plants[[plant_i]]), 1) # flower j
+                   
+                   plants[[plant_i]][flower_i] <- plants[[plant_i]][flower_i] + 1 # visit to ij
+                 }
+               }
              }
              
-             vis
+             plants
              
            })
 Sys.time() - t1
 
-plot(density(visits_bee), main = 'x', xlab = 'Number of floral visits of a single bee per day')
+names(plants) <- paste('Hive', 1:length(plants), sep = '')
 
-
-# this is an alternative way 
-
-# time <- vector('double', length = 1)
-# vis <- 0
-# 
-# visits_bee <- vector('double', beehive_strength[1])
-# 
-# foraging_time <- sample(foraging_time, beehive_strength[1], T)
-# 
-# t1 <- Sys.time()
-# for (i in 1:beehive_strength[1]) {
-#   
-#   time <- 0
-#   vis <- 0
-#   
-#   while (time < foraging_time[[i]]) {
-#     time <- time + sample(time_visit, 1)
-#     vis <- vis + 1
-#   }
-#   
-#   visits_bee[[i]] <- vis
-# }
-# Sys.time() - t1
 
 ```
 
+```{r}
+plants <- readRDS('1_hive_1HA.rds')
+```
+
+Let me show 4four replicates of the visits given one low-quality hive per ha:
+
+```{r}
+t <- 1
+
+par(mfrow = c(2, 2))
+
+repeat {
+  
+  if (t > 4) break
+  
+  plot(density(plants[[t]][[t]]), ylim = c(0, 5), xlim = c(-0.5, 6), 
+       main = paste('Hive', t), xlab = 'Honeybee visits per flower\n (density: 1 hive per ha)')
+  for (i in seq_along(plants$Hive1)) {
+    lines(density(plants[[t]][[i]]), lwd = 0.01)
+  }
+  lines(density(unlist(lapply(plants[[t]], median))), col = 'red', lwd = 2)
+  
+  t <- t + 1
+  
+}
+par(mfrow = c(1, 1))
+```
+
+**I must generalize the function above to increase the number of hives per ha, but this looks promising**
 
 
-
-
-
+NEXT STEPS: I have to organize the models to predict the pollen deposition --> fruit size --> fruit weight --> 
+and Yield
 
 
 
