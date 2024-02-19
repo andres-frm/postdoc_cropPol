@@ -510,7 +510,8 @@ fruit_set <-
       apply(post_fruitset$year, 1, mean) 
   )
 
-plot(density(fruit_set))
+plot(density(fruit_set), main = '', 
+     xlab = 'blueberry fruit set')
 
 mean(fruit_set)
 
@@ -663,14 +664,17 @@ simulated_visits <-
     plants <- sample(flowers_plant, p_ha, replace = T) # plants per ha 
     
     set.seed(seed)
-    flowering_perc <- rbeta(p_ha, b1, b2) # flowering percentage parm
+    flowering_perc <- rbeta(p_ha, beta1, beta2) # flowering percentage parm
     
     plants <- round(plants * flowering_perc) # flowering percentage
+    
+    try <- plants
     
     plants <- lapply(plants, FUN = 
                        function(x) {
                          rep(0, x)
                        })
+    
     
     names(plants) <- paste('plant', 1:p_ha, sep = '')
     
@@ -681,11 +685,11 @@ simulated_visits <-
                                   sample(visits_bee, x, replace = T)
                                 })
     
-    plants <- 
-      lapply(foragers_visits, FUN = 
-               function(colmena) {
-                 
-                 if (hive_aggregate) {
+    if (hive_aggregate) {
+      
+      plants <- 
+        lapply(foragers_visits, FUN = 
+                 function(colmena) {
                    
                    for (k in 1:2) { # number of pollination days (blueberry days receptivity)
                      message(paste('Starting day', k, 'of pollination'))
@@ -705,20 +709,21 @@ simulated_visits <-
                    
                    plants
                    
-                 } else {
-                   
-                   set.seed(seed)
-                   plants <- sample(flowers_plant, p_ha, replace = T)
-                   
-                   plants <- round(plants * flowering_perc)
-                   
-                   plants <- lapply(plants, FUN = 
-                                      function(x) {
-                                        rep(0, x)
-                                      })
-                   
-                   names(plants) <- paste('plant', 1:p_ha, sep = '')
-                   
+                 })
+      
+      i <- 1
+      while (i < length(plants)) {
+        
+        for (j in 1:p_ha) plants[[i+1]][[j]] <- plants[[i]][[j]] + plants[[i+1]][[j]]
+        
+        i <- i + 1
+      }
+      
+    } else {
+      
+      plants <- 
+        lapply(foragers_visits, FUN = 
+                 function(colmena) {
                    
                    for (k in 1:2) { # number of pollination days (blueberry days receptivity)
                      message(paste('Starting day', k, 'of pollination'))
@@ -738,9 +743,9 @@ simulated_visits <-
                    
                    plants
                    
-                 }
-                 
-               })
+                 })
+      
+    }
     
     names(plants) <- paste('Hive', 1:length(plants), sep = '')
     
@@ -748,27 +753,48 @@ simulated_visits <-
     
   }
 
+
 t1 <- Sys.time()
 p <- simulated_visits(p_ha = p_01ha,
                       flowers_plant = total_flowers, 
                       visits_bee = visits_day, 
-                      bees_hive = hives_ha(10), 
+                      bees_hive = rep(hives_ha(1), 20), 
                       hive_aggregate = T)
 Sys.time() - t1
 
-sum(p$Hive2$plant1) - sum(p$Hive1$plant1 )
+unlist(lapply(p$Hive1, sum), use.names = F)
 
-which(is.na(unlist(lapply(p$Hive2, sum))))
+sum(p$Hive1$plant1)
 
-p$Hive1$plant771
+sum(p$Hive2$plant1) - sum(p$Hive1$plant1)
 
-plot(density(p$Hive1[[1]]), ylim = c(0, 6), xlim = c(-0.5, 6),
-     xlab = 'Honeybee visits per flower\n (density: 1 hive per ha)')
-lines(density(p$Hive10[[1]] + p$Hive1[[1]] + p$Hive2[[1]] + 
-              p$Hive3[[1]] + p$Hive4[[1]] + p$Hive5[[1]] +
-                p$Hive6[[1]] + p$Hive7[[1]] + p$Hive8[[1]] +
-                p$Hive9[[1]]), col = 'red')
+sum(p$Hive20$plant1) - sum(p$Hive19$plant1)
 
+length(p)
+
+par(mfrow = c(2, 2))
+for (i in seq_along(p)) {
+  
+  plot(density(p[[i]][[1]]), ylim = c(0, 6), xlim = c(-0.5, 6),
+       xlab = paste('Honeybee visits per flower\n (density:', 
+                    i, ' hive per ha)'), 
+       lwd = 0.1, main = '', col = i)
+  
+  for (j in 1:100) {
+    lines(density(p[[i]][[j]]), col = i, lwd = 0.1) 
+  }
+}
+par(mfrow = c(1, 1))
+
+
+
+
+
+p$output$Hive1$plant5
+
+p$frame
+
+length(p$Hive1$plant1)
 t <- 1
 
 par(mfrow = c(2, 2))
