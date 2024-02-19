@@ -1,5 +1,5 @@
 pks <- c('tidyverse', 'rethinking', 'rstan', 'magrittr', 'cmdstanr',
-         'ggdag', 'dagitty')
+         'ggdag', 'dagitty', 'readxl')
 sapply(pks, library, character.only = T)
 
 
@@ -54,10 +54,23 @@ ggdag(sim_mod) +
 # individuals. Number of bees is estimated from a NegBin distribution
 # and the proportion of foragers with a beta distribution.
 
+farrar_law <- 
+  tribble(~population, ~workers, ~proportion,
+          10000, 2000, 0.2,
+          20000, 5000, 0.25, 
+          30000, 10000, 0.3,
+          40000, 20000, 0.5,
+          50000, 30000, 0.6,
+          60000, 39000, 0.65)
+
+farrar_law %$% plot(population, proportion, type = 'l')
+
+plot(density(rbeta(1e3, 2.5, 8)))
+
 hives_ha <- function(n_hives = 25, # n hives to be simulated
                      mu_pop = 1e4, # mu parameter NegBin distribution. N Bees per hive
                      sigma_pop = 10, # dispersion parameter NegBin distribution. N Bees per hive
-                     beta_1 = 5.5, # parameter 1 beta distribution. Proportion of foragers
+                     beta_1 = 2.5, # parameter 1 beta distribution. Proportion of foragers
                      beta_2 = 8, # parameter 1 beta distribution. Proportion of foragers
                      seed = 1){
   
@@ -219,7 +232,8 @@ ppcheck_visit_honeybee <-
              
            })
 
-plot(density(ppcheck_visit_honeybee[1, ]), ylim = c(0, 0.09))
+plot(density(ppcheck_visit_honeybee[1, ]), ylim = c(0, 0.09), lwd = 0.1, 
+     main = '', xlab = 'Honeybee time of floral visit (s)')
 for (i in 1:100) lines(density(ppcheck_visit_honeybee[i, ]), lwd = 0.1)
 lines(density(visit_span), col = 'red', lwd = 2)
 
@@ -283,14 +297,78 @@ dat_fs <- readRDS('fruit_set.rds')
 dat_fs <- dat_fs[, c("plant_id", "farm_id", "year_id",
                      "beehive", "treatment", "flowers", "fruits")]
 
-dat_fs <- lapply(dat_fs, function(x) x)
+dat_fs$treatment <- ifelse(dat_fs$treatment == 1, 'close', 'open')
+
+dat_fs |> 
+  ggplot(aes(as.factor(treatment), fruits)) +
+  geom_boxplot()
+
+dat_fs2 <- lapply(6:7, 
+                  function(x) {
+                    t <- read_xlsx('tesis_pablo.xlsx', 
+                                   shee = x, 
+                                   col_names = T, 
+                                   na = 'NA')[, 1:5]
+                    
+                    t$locality <- 'entre_rios'
+                    t$treatment <- 'open'
+                    
+                    colnames(t) <- c('farm_id', 'plant_id', 'branch_id',
+                                     'flowers', 'fruits', 'locality_id', 
+                                     'treatment')
+
+                    t$branch_id <- t %$% paste(farm_id,
+                                              plant_id,
+                                              branch_id,
+                                              sep = '')
+
+                    t$plant_id <- t %$% paste(farm_id,
+                                              plant_id,
+                                              sep = '')
+                    
+                    t
+                  })
+
+names(dat_fs2) <- paste('y', c(2016, 2021), sep = '')
+dat_fs2$y2016$year_id <- '2016'
+dat_fs2$y2021$year_id <- '2021'
+
+dat_fs$branch_id <- 1
+dat_fs$locality_id <- 'tucuman'
+
+
+dat_fs <- dat_fs[, c("farm_id", "plant_id", 
+                     'branch_id', "flowers", 
+                     "fruits", "locality_id", 
+                     "treatment", "year_id")]
+
+dat_fs$branch_id <- paste(dat_fs$farm_id, dat_fs$plant_id, 
+                          dat_fs$branch_id, sep = '_')
+dat_fs$plant_id <- paste(dat_fs$farm_id, 
+                         dat_fs$plant_id, sep = '_')
+
+
+dat_fs <- rbind(dat_fs, dat_fs2$y2016, dat_fs2$y2021)
+
+dat_fs <- na.omit(dat_fs)
+
+dat_fs <- 
+  lapply(dat_fs, 
+         function(x) {
+           if (is.character(x)) as.numeric(as.factor(x))
+           else x
+         })
+
 unlist(lapply(dat_fs, function(x) sum(is.na(x))))
 
 dat_fs$N <- length(dat_fs$plant_id)
+dat_fs$N_site <- length(unique(dat_fs$locality_id))
 dat_fs$N_farm <- length(unique(dat_fs$farm_id))
+dat_fs$N_plant <- length(unique(dat_fs$plant_id))
+dat_fs$N_branch <- length(unique(dat_fs$branch_id))
 dat_fs$N_treatment <- length(unique(dat_fs$treatment))
 dat_fs$N_year <- length(unique(dat_fs$year_id))
-dat_fs$N_beehive <- length(unique(dat_fs$beehive))
+
 
 plot(density(rnorm(1e3, 50, 25)))
 
@@ -298,37 +376,47 @@ cat(file = 'fruit_set.stan',
     '
     data{
       int N;
+      int N_site;
       int N_farm;
+      int N_plant;
+      //int N_branch;
       int N_treatment;
       int N_year;
-      int N_beehive;
       array[N] int flowers;
       array[N] int fruits;
-      array[N] int farm_id;
       array[N] int year_id;
-      array[N] int beehive;
+      array[N] int locality_id;
+      array[N] int farm_id;
+      array[N] int plant_id;
+      //array[N] int branch_id;
       array[N] int treatment;
     }
     
     parameters{
-      vector[N_treatment] t;
-      vector[N_farm] farm;
       vector[N_year] year;
-      vector[N_beehive] BH;
+      vector[N_site] locality;
+      vector[N_farm] farm;
+      vector[N_plant] plant;
+      //vector[N_branch] branch;
+      vector[N_treatment] t;
     }
     
     model{
       vector[N] p;
-      t ~ normal(0, 1);
-      farm ~ normal(0, 1);
       year ~ normal(0, 1);
-      BH ~ normal(0, 1);
+      locality ~ normal(0, 1);
+      farm ~ normal(0, 1);
+      plant ~ normal(0, 1);
+      //branch ~ normal(0, 1);
+      t ~ normal(0, 1);
     
       for (i in 1:N) {
         p[i] = t[treatment[i]] + 
-                farm[farm_id[i]] + 
-                year[year_id[i]] + 
-                BH[beehive[i]]; 
+                locality[locality_id[i]] + 
+                farm[farm_id[i]] +
+                plant[plant_id[i]] +
+                //branch[branch_id[i]] +
+                year[year_id[i]]; 
         
         p[i] = inv_logit(p[i]);
       }
@@ -353,13 +441,15 @@ mod_fs_exp <-
     refresh = 200
   )
 
-output_mod_fruitset<- mod_fs_exp$summary() 
+output_mod_fruitset <- mod_fs_exp$summary() 
+
+output_mod_fruitset |> print(n = 464)
 
 trace_plot(mod_fs_exp, output_mod_fruitset$variable[1], 3)
 
 par(mfrow = c(2, 4))
 for (i in 2:9) {
-  trace_plot(mod_fs_exp, output_mod_fruitset$variable[1], 3)
+  trace_plot(mod_fs_exp, output_mod_fruitset$variable[i], 3)
 }
 par(mfrow = c(1, 1))
 
@@ -371,7 +461,10 @@ post_fruitset <- as.matrix(post_fruitset)
 
 post_fruitset <- 
   list(treatment = post_fruitset[, grep('^t', colnames(post_fruitset))], 
+       locality = post_fruitset[, grep('^locality', colnames(post_fruitset))], 
        farm = post_fruitset[, grep('^farm', colnames(post_fruitset))], 
+       plant = post_fruitset[, grep('^plant', colnames(post_fruitset))], 
+       #branch = post_fruitset[, grep('^branch', colnames(post_fruitset))], 
        year = post_fruitset[, grep('^year', colnames(post_fruitset))],
        BH = post_fruitset[, grep('^BH', colnames(post_fruitset))])
 
@@ -382,14 +475,19 @@ ppcheck_fruit_set <-
              p <- with(dat_fs, 
                        {
                          t <- treatment[x]
+                         l <- locality_id[x]
                          f <- farm_id[x]
+                         p <- plant_id[x]
+                         #b <- branch_id[x]
                          y <- year_id[x]
-                         b <- beehive[x]
+                         
                          
                          post_fruitset$treatment[, t, drop = T] +
+                           post_fruitset$locality[, l, drop = T] +
                            post_fruitset$farm[, f, drop = T] +
-                           post_fruitset$year[, y, drop = T] +
-                           post_fruitset$BH[, b, drop = T]
+                           post_fruitset$plant[, p, drop = T] +
+                           #post_fruitset$branch[, b, drop = T] +
+                           post_fruitset$year[, y, drop = T] 
                          
                        })
              
@@ -397,7 +495,8 @@ ppcheck_fruit_set <-
              
            })
 
-plot(density(ppcheck_fruit_set[1, ]), ylim = c(0, 0.04))
+plot(density(ppcheck_fruit_set[1, ]), ylim = c(0, 0.025), lwd = 0.1, 
+     main = '', xlab = 'Number of fruit')
 for (i in 1:100) lines(density(ppcheck_fruit_set[i, ]), lwd = 0.1)
 lines(density(dat_fs$fruits), col = 'red', lwd = 2)
 
@@ -405,9 +504,10 @@ lines(density(dat_fs$fruits), col = 'red', lwd = 2)
 fruit_set <- 
   inv_logit(
     post_fruitset$treatment[, 2, drop = T] +
+      apply(post_fruitset$locality, 1, mean) + 
       apply(post_fruitset$farm, 1, mean) +
-      apply(post_fruitset$year, 1, mean) +
-      apply(post_fruitset$BH, 1, mean)
+      apply(post_fruitset$plant, 1, mean) +
+      apply(post_fruitset$year, 1, mean) 
   )
 
 plot(density(fruit_set))
@@ -486,7 +586,7 @@ output_mod_tot_fru |> print(n = 21)
 
 trace_plot(mod_fruit_plant, output_mod_tot_fru$variable[1], 3)
 
-par(mfrow = c(3, 1))
+par(mfrow = c(1, 3))
 for (i in 2:4) trace_plot(mod_fruit_plant, output_mod_tot_fru$variable[i], 3)
 par(mfrow = c(1, 1))
 
@@ -515,8 +615,8 @@ ppcheck_tot_fru <-
            })
 
 plot(density(ppcheck_tot_fru[1, ]), ylim = c(0, 0.00025), main = '', 
-     xlab = 'Fruit produced per plant')
-for (i in 1:100) lines(density(ppcheck_tot_fru[i, ]))
+     xlab = 'Fruit produced per plant', lwd = 0.1)
+for (i in 1:100) lines(density(ppcheck_tot_fru[i, ]), lwd = 0.1)
 lines(density(fruit_plant$total_fruts), col = 'red', lwd = 2)
 
 
