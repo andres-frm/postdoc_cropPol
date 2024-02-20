@@ -1,5 +1,5 @@
 pks <- c('tidyverse', 'rethinking', 'rstan', 'magrittr', 'cmdstanr',
-         'ggdag', 'dagitty', 'readxl')
+         'ggdag', 'dagitty', 'readxl', 'brms')
 sapply(pks, library, character.only = T)
 
 
@@ -118,7 +118,7 @@ trips_bee_LQ <- trip_frequency_LQ * ((8*60)/90) # number of trips per day
 foraging_time_LQ <- trip_span_LQ * trips_bee_LQ # foraging time in seconds
 
 
-par(mfrow = c(2, 2))
+par(mfrow = c(2, 2), mar = c(4.2, 4.2, 1, 1))
 
 plot(density(trip_frequency_HQ), col = 'gold3', main = '', ylim = c(0, 5.5),
      xlab = 'Number of foraging trips (trips/90 min)', lwd = 2)
@@ -286,7 +286,8 @@ visits_day <- N_foraging_trips(iter = 2e4,
 Sys.time() - t1
 
 
-plot(density(visits_day), main = '', xlab = 'Number of floral visits of\n a single forager honeybee bee per day')
+plot(density(visits_day), main = '', xlab = 'Number of floral visits of\n a single forager honeybee bee per day',
+     lwd = 4, col = 'lightblue')
 
 # ====== Plants ha, flower density and percentage ======= 
 
@@ -637,7 +638,8 @@ total_flowers <- round(total_flowers)
 lines(density(total_fruts), col = 'red')
 
 plot(density(total_flowers), main = '', 
-     xlab = 'Flowers per blueberry bush', xlim = c(0, 20e3)) 
+     xlab = 'Flowers per blueberry bush', xlim = c(0, 20e3), 
+     lwd = 4, col = 'lightblue') 
 
 
 # ================== 4. Plants ha ======
@@ -758,7 +760,7 @@ t1 <- Sys.time()
 p <- simulated_visits(p_ha = p_01ha,
                       flowers_plant = total_flowers, 
                       visits_bee = visits_day, 
-                      bees_hive = rep(hives_ha(1), 20), 
+                      bees_hive = hives_ha(20), 
                       hive_aggregate = T)
 Sys.time() - t1
 
@@ -774,24 +776,89 @@ length(p)
 
 hives <- c(1, 7, 14, 20)
 
-par(mfrow = c(2, 2), mar = c(4, 4, 1.5, 1.5))
-for (i in seq_along(hives)) {
-  
-  plot(density(p[[hives[i]]][[1]]), ylim = c(0, 10), xlim = c(-0.5, 6),
-       xlab = paste('Honeybee visits per flower\n (density:', 
-                    hives[i], ' hive per ha)'), 
-       lwd = 0.1, main = '', col = i)
-  
-  for (j in 1:100) {
-    lines(density(p[[hives[i]]][[j]]), col = i, lwd = 0.1) 
-  }
+par(mfrow = c(2, 2), mar = c(4.2, 4.2, 1.5, 1.5))
+
+plot(density(p$Hive1[[1]]), ylim = c(0, 10), xlim = c(-0.5, 6),
+     xlab = paste('Honeybee visits per flower\n (density:', 
+                  1, ' hive per ha)'), 
+     lwd = 0.3, main = '', col = 1)
+
+for (j in 1:100) {
+  lines(density(p$Hive1[[j]]), col = 1, lwd = 0.3) 
 }
+
+
+plot(density(p$Hive7[[1]]), ylim = c(0, 2), xlim = c(-0.5, 15),
+     xlab = paste('Honeybee visits per flower\n (density:', 
+                  7, ' hive per ha)'), 
+     lwd = 0.3, main = '', col = 2)
+
+for (j in 1:100) {
+  lines(density(p$Hive7[[j]]), col = 2, lwd = 0.3) 
+}
+
+plot(density(p$Hive14[[1]]), ylim = c(0, 0.8), xlim = c(-0.5, 30),
+     xlab = paste('Honeybee visits per flower\n (density:', 
+                  14, ' hive per ha)'), 
+     lwd = 0.3, main = '', col = 3)
+
+for (j in 1:100) {
+  lines(density(p$Hive14[[j]]), col = 3, lwd = 0.3) 
+}
+
+plot(density(p$Hive20[[1]]), ylim = c(0, 0.45), xlim = c(-0.5, 40),
+     xlab = paste('Honeybee visits per flower\n (density:', 
+                  20, ' hive per ha)'), 
+     lwd = 0.3, main = '', col = 4)
+
+for (j in 1:100) {
+  lines(density(p$Hive20[[j]]), col = 4, lwd = 0.3) 
+}
+
 par(mfrow = c(1, 1))
 
-dev.off()
+
+plot(density(unlist(lapply(p$Hive20, median), use.names = F)), 
+     xlim = c(0, 40), main = '', lwd = 0, ylim = c(0, 0.25), 
+     xlab = 'Number of honeybee visits per flower')
+for (i in seq_along(p)) {
+  lines(density(unlist(lapply(p[[i]], median), use.names = F)), 
+        lwd = 0.5, col = i)
+}
 
 
-# ====== Hoenybee pollen deposition ====
+vis_cult <- 
+  lapply(p, FUN = 
+           function(x) {
+             
+             t <- unlist(lapply(x, median), use.names = F)
+             
+             tibble(plant = paste('plant', 1:length(t), sep = ''), 
+                    visits = t)
+             
+           })
+
+for (i in seq_along(vis_cult)) {
+  vis_cult[[i]]$n_hives <- paste(i)
+}
+
+vis_cult <- do.call('rbind', vis_cult)
+
+vis_cult |> 
+  group_by(n_hives) |> 
+  transmute(mu = median(visits), 
+            li = quantile(visits, 0.025),
+            ls = quantile(visits, 0.975)) |> 
+  unique() |> 
+  ggplot(aes(fct_reorder(n_hives, ls), mu, ymin = li, ymax = ls)) +
+  geom_errorbar(width = 0) +
+  geom_point() +
+  labs(x = 'Hive density per ha', y = 'Average floral visits per plant') +
+  theme_bw() +
+  theme(panel.grid = element_blank())
+
+
+# ====== 5. Hoenybee pollen deposition ====
 apisSVP <- readRDS('honeybee_svpd_data.rds')
 
 apisSVP <- apisSVP[-which.max(apisSVP)] # removing value with 155 pollen deposition
@@ -842,6 +909,8 @@ model_apis_svp <-
 
 out_put_apis_svp <- model_apis_svp$summary()
 
+model_apis_svp$summary()
+
 par(mfrow = c(1, 3))
 for (i in 1:3) trace_plot(model_apis_svp, out_put_apis_svp$variable[i], 3)
 par(mfrow = c(1, 1))
@@ -862,26 +931,6 @@ plot(density(pp_check_svp[1, ]), lwd = 0.1, main = '',
      xlab = 'Single visit pollen deposition', ylim = c(0, 0.03))
 for (i in 1:100) lines(density(pp_check_svp[i, ]), lwd = 0.1)
 lines(density(dat_apis$visits), col = 'red')
-
-df <- tibble()
-df2 <- tibble()
-
-
-set.seed(1234)
-for (j in 1:10) {
-  
-  sum_pol <- vector("double", 5000)
-  for (i in 1:5000) {
-    sum_pol[[i]] <- sum(sample(apisSVP, j, T))
-  }
-  
-  df <- tibble(poll_ac = sum_pol,
-               cero = rep(0, 5000),
-               vis = as.factor(rep(paste("Visit", j), 5000)))
-  
-  df2 <- rbind(df2, df)
-  
-}
 
 set.seed(1234)
 sim_visits <- 
@@ -917,247 +966,220 @@ for (i in seq_along(sim_visits)) {
 sim_visits <- do.call('rbind', sim_visits)
 
 sim_visits %$% plot(vis + rnorm(1e4, 0.1, 0.1), poll_ac, cex = 0.1, 
-                    xlab = 'Number of visits', ylab = 'Pollen deposition',
-                    main = 'Honeybees')
+                    xlab = 'Number of honeybee visits', 
+                    ylab = 'Pollen deposition', 
+                    ylim = c(0, 600))
+points(1:10, 
+       tapply(sim_visits$poll_ac, sim_visits$vis, FUN = mean), 
+       col = 'red', pch = 15)
+abline(h = c(112, 274), lty = 2, col = 'red')
+text(x = 2, y = 300, 'Optimal pollination')
 
-df2$sim <- rep('obs', nrow(df2))
-df2$sim_vis <- paste(df2$vis, df2$sim)
+beta <- rnorm(20, 3, 0.5)
+alpha <- rnorm(20, 20, 5)
+plot(NULL, xlim = c(0, 20), ylim = c(0, 100))
+for (i in 1:50) curve(alpha[i] + beta[i]*x, add = T, lwd = 0.3)
 
+sim_visits <- lapply(sim_visits[1:2], function(x) x)
 
-summary(lm(sim_visits$poll_ac ~ sim_visits$vis))
+sim_visits$N <- length(sim_visits$poll_ac)
 
+cat(file = 'slope_svp_apis.stan', 
+    '
+    data{
+      int N;
+      array[N] int poll_ac;
+      array[N] int vis;
+    }
+    
+    parameters{
+      real alpha;
+      real beta;
+      real<lower = 0> sigma;
+    }
+    
+    model{
+      vector[N] lambda;
+      alpha ~ normal(20, 5);
+      beta ~ normal(3, 0.5);
+      sigma ~ exponential(1);
+    
+      for (i in 1:N) {
+        lambda[i] = alpha + beta*vis[i];
+        lambda[i] = exp(lambda[i]);
+      }
+    
+      poll_ac ~ neg_binomial_2(lambda, sigma);
+    }
+    ')
+
+file <- paste(getwd(), '/slope_svp_apis.stan', sep = '')
+
+fit_svp_slope <- cmdstan_model(file, compile = T)
+
+mod_svp_slope <- 
+  fit_svp_slope$sample(
+    data = sim_visits, 
+    chains = 3,
+    parallel_chains = 3, 
+    iter_sampling = 2e3, 
+    iter_warmup = 500, 
+    thin = 3,
+    refresh = 200, 
+    seed = 123
+  )
+
+output_mod_slope <- mod_svp_slope$summary()
+output_mod_slope
+
+post_svp_slope <- mod_svp_slope$draws(format = 'df')
+colnames(post_svp_slope)
+#for (i in 2:3) post_svp_slope[[i]] <- exp(post_svp_slope[[i]])
+
+par(mfrow = c(2, 2))
+for (i in 1:4) trace_plot(mod_svp_slope, output_mod_slope$variable[i], 3)
+par(mfrow = c(1, 1))
+
+ppcheck_slope <- 
+  sapply(1:length(sim_visits$vis), FUN = 
+           function(i) {
+             
+             x <- sim_visits$vis[i]
+             
+             lambda <- 
+               post_svp_slope$alpha +
+               post_svp_slope$beta*x
+             
+             rnbinom(100, 
+                     mu = exp(lambda),
+                     size = exp(post_svp_slope$alpha))
+           })
+
+plot(NULL, lwd = 0.1, main = '', 
+     xlab = 'Single visit pollen deposition', 
+     xlim = c(0, 600), ylim = c(0, 0.007))
+for (i in 1:50) lines(density(ppcheck_slope[i, ]), lwd = 0.1)
+lines(density(sim_visits$poll_ac), col = 'red')
 
 # here I have to fit the poisson model and then 
 
 
+# ========= 6. Visit to pollen ========
 
+pollen_fruit <- readRDS('data_optimal_pollination.rds')
+pollen_fruit <- pollen_fruit[, c("tratamiento", "fruto_diam", 
+                                 "carga_poli", "carga_poli2")]
 
-# ====== Hoenybee pollen deposition ====
-apisSVP <- readRDS('honeybee_svpd_data.rds')
-
-apisSVP <- apisSVP[-which.max(apisSVP)]
-
-tibble(x = c(0, 70)) |> 
-  ggplot(aes(x)) +
-  stat_function(fun = dlnorm, args = c(3, 1)) +
-  labs(x = NULL, y = NULL, 
-       title = expression(mu['honeybee pollen deposition'~'~'~'LogNormal(3, 1)']))
-
-dat_apis <- list(visits = apisSVP)
-
-plot(density(rnbinom(1e3, mu = exp(3), exp(1))))
-
-model_apisNB <- 
-  ulam(
-    alist(
-      visits ~ dgampois(lambda, phi),
-      log(lambda) <- mu,
-      mu ~ dnorm(3, 1),
-      phi ~ dexp(1)
-    ), data = dat_apis, chains = 3, cores = 3, warmup = 500, iter = 2e3
-  )
-
-precis(model_apisNB, depth = 2)
-exp(precis(model_apisNB, depth = 2))
-
-post_apis_NB <- extract.samples(model_apisNB)
-
-pp_simNB <- sapply(1:100, simplify = 'array', FUN = 
-                     function(i) {
-                       with(post_apis_NB, 
-                            {rnbinom(1e3, mu = exp(mu[i]), size = exp(phi[i]))})
-                     })
-
-model_apisPois <- 
-  ulam(
-    alist(
-      visits ~ dpois(lambda),
-      log(lambda) <- mu,
-      mu ~ dnorm(3, 1)
-    ), data = dat_apis, chains = 3, cores = 3, warmup = 500, iter = 2e3
-  )
-
-precis(model_apisPois, depth = 2)
-exp(precis(model_apisPois, depth = 2))
-
-post_apisPois <- extract.samples(model_apisPois)
-
-pp_simPois <- sapply(1:100, FUN = 
-                       function(i) {
-                         with(post_apisPois, 
-                              {rpois(1e3, exp(mu[i]))})
-                       })
-plot(density(rlnorm(1e3, log(17), log(2))))
-
-model_apislog <- 
-  ulam(
-    alist(
-      visits ~ dlnorm(mu, sigma),
-      mu <- alpha,
-      alpha ~ dnorm(17, 1),
-      sigma ~ dexp(1)
-    ), data = dat_apis, chains = 3, 
-    cores = 3, warmup = 500, iter = 2e3
-  )
-
-precis(model_apislog, depth = 2)
-exp(precis(model_apislog, depth = 2))
-
-post_apislog <- extract.samples(model_apislog)
-
-pp_simLOG <- sapply(1:100, FUN = 
-                      function(i) {
-                        with(post_apislog, 
-                             {rlnorm(1e3, alpha[i], sigma[i])})
-                      })
-
-plot(density(apisSVP), col = 'tan1', lwd = 2, ylim = c(0, 0.08), main = '')
-for (i in 1:100) lines(density(pp_simNB[, i]), lwd = 0.1)
-for (i in 1:100) lines(density(pp_simPois[, i]), lwd = 0.1, col = 'red')
-for (i in 1:100) lines(density(pp_simLOG[, i]), lwd = 0.1, col = 'green')
-lines(density(apisSVP), col = 'tan1', lwd = 3)
-
-# mejor el modelo gamma-possion (binomial negativa)
+quantile(pollen_fruit$carga_poli)
+mu_asintota <- round(((370-187)/2) + 187)
+asymptote <- rnorm(2001, mu_asintota, 15)
+slope <- post_svp_slope$beta
 
 
 
-exp(mean(post_apis_NB$mu)) # Average pollen deposition
-exp(quantile(post_apis_NB$mu, probs = c(0.025, 0.975))) # Credibility intervals
+plot(NULL, xlim = c(0, 30), ylim = c(0, 320), xlab = 'Honeybee visits', 
+     ylab = 'Single visit pollen deposition')
+for (i in 1:200) curve(asymptote[i]*(1-exp(-slope[i]*x)), 
+                       add = T, lwd = 0.1)
+curve(mean(asymptote)*(1-exp(-mean(slope)*x)), 
+      add = T, lwd = 2, col = 'red')
 
-df <- tibble()
-df2 <- tibble()
-
-
-set.seed(1234)
-for (j in 1:10) {
-  
-  sum_pol <- vector("double", 5000)
-  for (i in 1:5000) {
-    sum_pol[[i]] <- sum(sample(apisSVP, j, T))
+pollen_deposition_fun <- function(x, mu_est = T, n_posterior = 10) {
+  if (mu_est) {
+    a <- mean(asymptote)
+    b <- mean(slope)
+    
+    return(round(a * (1-exp(-b*x))))
+  } else {
+    a <- sample(asymptote, n_posterior, T)
+    b <- sample(slope, n_posterior, T)
+    
+    return(round(a * (1-exp(-b*x))))
   }
-  
-  df <- tibble(poll_ac = sum_pol,
-               cero = rep(0, 5000),
-               vis = as.factor(rep(paste("Visit", j), 5000)))
-  
-  df2 <- rbind(df2, df)
-  
 }
 
-set.seed(1234)
-try <- 
-  apply(pp_sim[c(sample(1:ncol(pp_simNB), size = 50, replace = F)),], 1, 
-        simplify = 'list', FUN = 
-          function(x) {
-            
-            df_2 <- tibble()
-            
-            for (j in 1:10) {
-              
-              sum_vis <- vector("double", 2000)
-              for (i in 1:2000) {
-                sum_vis[[i]] <- sum(sample(x, size = j, T))
-              }
-              
-              df_ <- tibble(poll_ac = sum_vis,
-                            cero = rep(0, 2000),
-                            vis = as.factor(rep(paste("Visit", j), 2000)))
-              
-              df_2 <- rbind(df_2, df_)
-              
-            }
-            df_2
-          })
-
-names(try) <- paste('sim', 1:length(try))
-
-for (i in seq_along(try)) {
-  try[[i]]$sim <- rep(paste('sim', i), nrow(try[[i]]))
-}
-
-try <- do.call('rbind', try)
-try$sim_vis <- paste(try$vis, try$sim)
-
-df2$sim <- rep('obs', nrow(df2))
-df2$sim_vis <- paste(df2$vis, df2$sim)
-
-
-try <- rbind(try, df2)
-
-colors <- grepl('obs', levels(as.factor(try$sim_vis)))
-lines <- grepl('obs', unique(try$sim_vis))
-
-try |> 
-  ggplot(aes(poll_ac, y = after_stat(scaled))) +
-  geom_density(aes(color = sim_vis), alpha = 0, linewidth = 0.05) +
-  scale_color_manual(values = ifelse(colors == T, 'red', 'black')) +
-  geom_density(data = try[try$sim == 'obs',], aes(poll_ac, y = after_stat(scaled)),
-               alpha = 0, linewidth = 0.3, color = 'red') +
-  geom_vline(xintercept = c(112, 274), linetype = 2) +
-  geom_vline(xintercept = 192, linetype = 3) + 
-  scale_x_continuous(limits = c(0, 500)) +
-  facet_wrap(~ vis, scales = "free") +
-  theme_bw() +
-  labs(x = "SPL after sequential honeybee visits", y = NULL) +
-  theme(legend.position = "none",
-        panel.grid = element_blank())
-
-try <- try[try$sim != 'obs', ]
-
-try$sim <- as.factor(try$sim)
-
-try <- split(try, list(try$vis, try$sim))
-
-ci_prop_vis_ <- 
-  lapply(try,
-         function(x) {
-           vec <- x$poll_ac
-           vec2 <- sum(vec >= 112 & vec <= 274)/length(vec)
-           
-           tibble(prop = vec2)
-         })
-
-
-for (i in seq_along(ci_prop_vis_)) {
-  ci_prop_vis_[[i]]$vis <- gsub('^(.*)\\.(.*)', "\\1", names(ci_prop_vis_)[i])
-}
-
-ci_prop_vis_ <- do.call('rbind', ci_prop_vis_)
-
-ci_prop_vis_$vis <- as.factor(ci_prop_vis_$vis)
-
-ci_prop_vis_ <- 
-  lapply(split(ci_prop_vis_, ci_prop_vis_$vis), FUN = 
+pollen_deposition <- 
+  lapply(p, FUN = 
            function(x) {
-             tibble(mean = mean(x$prop),
-                    u_ic = quantile(x$prop, probs = 0.975),
-                    l_ic = quantile(x$prop, probs = 0.025))
+             lapply(x, pollen_deposition_fun)
            })
 
-for (i in seq_along(ci_prop_vis_)) ci_prop_vis_[[i]]$vis <- names(ci_prop_vis_)[i]
 
-ci_prop_vis_ <- do.call('rbind', ci_prop_vis_)
+par(mfrow = c(2, 2))
 
-ci_prop_vis_$vis <- as.numeric(gsub('^(.*)\\s(.)', '\\2', ci_prop_vis_$vis))
+plot(density(pollen_deposition$Hive1[[1]]), ylim = c(0, 0.2), 
+     xlim = c(-10, 159),
+     xlab = paste('Pollen deposition per flower', 
+                  '(1 hive per ha)'), 
+     lwd = 0.3, main = '', col = 1)
 
-ci_prop_vis_ <- ci_prop_vis_[order(ci_prop_vis_$vis), ]
-
-ci_prop_vis_$vis <- as.factor(ci_prop_vis_$vis)
-
-ggplot(ci_prop_vis_) + 
-  geom_errorbar(aes(ymin = l_ic, ymax = u_ic, x = vis),
-                width = 0.2, color = 'tan1') + 
-  geom_line(aes(vis, mean, group = 1), linetype = 2) +
-  geom_point(aes(vis, mean), color = 'tan1', size = 2) +
-  theme_bw() +
-  labs(x = 'Number of honeybee visits',
-       y = 'Prop. Optmimal SPLs') +
-  theme(panel.grid = element_blank(),
-        axis.title = element_text(size = 10.5))
+for (j in 1:100) {
+  lines(density(pollen_deposition$Hive1[[j]]), col = 1, lwd = 0.3) 
+}
 
 
+plot(density(pollen_deposition$Hive7[[1]]), ylim = c(0, 0.05), 
+     xlim = c(-10, 300),
+     xlab = paste('Pollen deposition per flower', 
+                  '(7 hives per ha)'), 
+     lwd = 0.3, main = '', col = 2)
+
+for (j in 1:100) {
+  lines(density(pollen_deposition$Hive7[[j]]), col = 2, lwd = 0.3) 
+}
 
 
+plot(density(pollen_deposition$Hive14[[1]]), ylim = c(0, 0.1), 
+     xlim = c(-10, 300),
+     xlab = paste('Pollen deposition per flower', 
+                  '(14 hives per ha)'), 
+     lwd = 0.3, main = '', col = 3)
+
+for (j in 1:100) {
+  lines(density(pollen_deposition$Hive14[[j]]), col = 3, lwd = 0.3) 
+}
+
+plot(density(pollen_deposition$Hive20[[1]]), ylim = c(0, 0.1), 
+     xlim = c(-10, 300),
+     xlab = paste('Pollen deposition per flower', 
+                  '(20 hives per ha)'), 
+     lwd = 0.4, main = '', col = 3)
+
+for (j in 1:100) {
+  lines(density(pollen_deposition$Hive20[[j]]), col = 4, lwd = 0.3) 
+}
+
+par(mfrow = c(1, 1))
+
+
+
+# ============= 7. Pollen to fruit =====
+
+optimal_model <- bf(fruto_diam ~ carga_poli + carga_poli2 + tratamiento)
+
+get_prior(optimal_model, data = pollen_fruit, family = "Gaussian")
+
+prior_optMod <- c(set_prior('normal(5, 3)', class = 'Intercept'),
+                  set_prior('normal(0, 1)', class = 'b', coef = 'tratamientocs'),
+                  set_prior('normal(0, 1)', class = 'b', coef = 'tratamientol'),
+                  set_prior('normal(0, 1)', class = 'b', coef = 'tratamientols'),
+                  set_prior('normal(0, 0.2)', class = 'b', coef = 'carga_poli'),
+                  set_prior('normal(0, 0.2)', class = 'b', coef = 'carga_poli2'),
+                  set_prior('exponential(1)', class = 'sigma'))
+
+optim_model <- brm(formula = optimal_model, data = modelo, family = gaussian,
+                   prior = prior_optMod, future = T, chains = 3,
+                   thin = 3, iter = 25e3, warmup =  500, seed = 222)
+
+summary(optim_model)
+
+coefs_optim <- fixef(optim_model)
+
+a <- coefs_optim[3, 1]
+b <- coefs_optim[2, 1]
+
+(x_value <- -b/(2*a)) # function vertex
+(y_value <- (a*(x_value)^2) + (b*x_value) + coefs_optim[1, 1]) # asíntot
 
 # =====================================
 
