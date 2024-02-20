@@ -700,9 +700,9 @@ simulated_visits <-
                        
                        for (i in 1:colmena[j]){ # foraging trips per bee
                          
-                         plant_i <- sample(1:length(plants), 1) # plant i
+                         plant_i <- round(runif(1, 1, length(plants))) # plant i
                          
-                         flower_i <- sample(1:length(plants[[plant_i]]), 1) # flower j
+                         flower_i <- round(runif(1, 1, length(plants[[plant_i]]))) # flower j
                          
                          plants[[plant_i]][flower_i] <- plants[[plant_i]][flower_i] + 1 # visit to ij
                        }
@@ -734,9 +734,9 @@ simulated_visits <-
                        
                        for (i in 1:colmena[j]){ # foraging trips per bee
                          
-                         plant_i <- sample(1:length(plants), 1) # plant i
+                         plant_i <- round(runif(1, 1, length(plants))) # plant i
                          
-                         flower_i <- sample(1:length(plants[[plant_i]]), 1) # flower j
+                         flower_i <- round(runif(1, 1, length(plants[[plant_i]]))) # flower j
                          
                          plants[[plant_i]][flower_i] <- plants[[plant_i]][flower_i] + 1 # visit to ij
                        }
@@ -857,6 +857,12 @@ vis_cult |>
   theme_bw() +
   theme(panel.grid = element_blank())
 
+t <- lapply(p, FUN = 
+              function(x) {
+                lapply(x, quantile)
+              })
+
+t$Hive20$plant4
 
 # ====== 5. Hoenybee pollen deposition ====
 apisSVP <- readRDS('honeybee_svpd_data.rds')
@@ -1066,7 +1072,7 @@ lines(density(sim_visits$poll_ac), col = 'red')
 
 # ========= 6. Visit to pollen ========
 
-pollen_fruit <- readRDS('data_optimal_pollination.rds')
+pollen_fruit <- readRDS('datos_experimento.rds')
 pollen_fruit <- pollen_fruit[, c("tratamiento", "fruto_diam", 
                                  "carga_poli", "carga_poli2")]
 
