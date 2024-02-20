@@ -700,7 +700,7 @@ simulated_visits <-
                        
                        for (i in 1:colmena[j]){ # foraging trips per bee
                          
-                         plant_i <- round(runif(1, 1, length(plants))) # plant i
+                         plant_i <- round(runif(1, 1, p_ha)) # plant i
                          
                          flower_i <- round(runif(1, 1, length(plants[[plant_i]]))) # flower j
                          
@@ -734,7 +734,7 @@ simulated_visits <-
                        
                        for (i in 1:colmena[j]){ # foraging trips per bee
                          
-                         plant_i <- round(runif(1, 1, length(plants))) # plant i
+                         plant_i <- round(runif(1, 1, p_ha)) # plant i
                          
                          flower_i <- round(runif(1, 1, length(plants[[plant_i]]))) # flower j
                          
@@ -773,8 +773,6 @@ sum(p$Hive2$plant1) - sum(p$Hive1$plant1)
 sum(p$Hive20$plant1) - sum(p$Hive19$plant1)
 
 length(p)
-
-hives <- c(1, 7, 14, 20)
 
 par(mfrow = c(2, 2), mar = c(4.2, 4.2, 1.5, 1.5))
 
@@ -862,7 +860,7 @@ t <- lapply(p, FUN =
                 lapply(x, quantile)
               })
 
-t$Hive20$plant4
+t$Hive7
 
 # ====== 5. Hoenybee pollen deposition ====
 apisSVP <- readRDS('honeybee_svpd_data.rds')
