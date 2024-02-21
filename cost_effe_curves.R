@@ -705,7 +705,7 @@ simulated_visits <-
                        
                        flower_id <- sample.int(sum_flowers, hive[trips_bee]) # visited flowers
                        
-                       for (k in seq_along(pla)) flowers[flower_id[k]] <- flowers[flower_id[k]] + 1
+                       for (k in seq_along(flower_id)) flowers[flower_id[k]] <- flowers[flower_id[k]] + 1
                        
                      }
                      
