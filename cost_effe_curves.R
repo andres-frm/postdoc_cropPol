@@ -512,7 +512,7 @@ fruit_set <-
   )
 
 plot(density(fruit_set), main = '', 
-     xlab = 'blueberry fruit set')
+     xlab = 'blueberry fruit set', col = 'lightblue', lwd = 4)
 
 mean(fruit_set)
 
@@ -670,46 +670,61 @@ simulated_visits <-
     
     plants <- round(plants * flowering_perc) # flowering percentage
     
-    try <- plants
     
     plants <- lapply(plants, FUN = 
                        function(x) {
                          rep(0, x)
-                       })
+                       }) # number of flowers per plant 
     
     
     names(plants) <- paste('plant', 1:p_ha, sep = '')
     
-    foragers_bees <- bees_hive
+    sum_flowers <- sum(unlist(lapply(plants, length), use.names = F))
+    
+    flowers <- rep(0, sum_flowers) # total flowers in 1 ha
+    
+    foragers_bees <- bees_hive # number of bees per hive
     
     foragers_visits <- lapply(foragers_bees, FUN = 
                                 function(x) {
                                   sample(visits_bee, x, replace = T)
-                                })
+                                }) # trips per bee per hive
     
     if (hive_aggregate) {
       
-      plants <- 
+      flowers <- 
         lapply(foragers_visits, FUN = 
-                 function(colmena) {
+                 function (hive) {
                    
-                   for (k in 1:2) { # number of pollination days (blueberry days receptivity)
-                     message(paste('Starting day', k, 'of pollination'))
+                   t1 <- Sys.time()
+                   for (day in 1:2) { # number of pollination days (blueberry days receptivity)
                      
-                     for (j in seq_along(colmena)) { # bees on beehive 
+                     message(paste('Starting day', day, 'of pollination'))
+                     
+                     for (trips_bee in seq_along(hive)) { # trips per bee
                        
-                       for (i in 1:colmena[j]){ # foraging trips per bee
-                         
-                         plant_i <- round(runif(1, 1, p_ha)) # plant i
-                         
-                         flower_i <- round(runif(1, 1, length(plants[[plant_i]]))) # flower j
-                         
-                         plants[[plant_i]][flower_i] <- plants[[plant_i]][flower_i] + 1 # visit to ij
-                       }
+                       flower_id <- sample.int(sum_flowers, hive[trips_bee]) # visited flowers
+                       
+                       for (k in seq_along(pla)) flowers[flower_id[k]] <- flowers[flower_id[k]] + 1
+                       
                      }
+                     
                    }
+                   message(paste('Execution time:'))
+                   print(Sys.time() - t1)
+                   flowers
+                 })
+      
+      plants <- 
+        lapply(flowers, FUN = # iteration across flowers visited by bees from hive i
+                 function(visits_hive_i) {
                    
-                   plants
+                   lapply(plants, FUN = 
+                            function(plant_i) {
+                              
+                              sample(visits_hive_i, length(plant_i)) # assign flower visits to each plant
+                              
+                            })
                    
                  })
       
@@ -723,27 +738,39 @@ simulated_visits <-
       
     } else {
       
-      plants <- 
+      flowers <- 
         lapply(foragers_visits, FUN = 
-                 function(colmena) {
+                 function (hive) {
                    
-                   for (k in 1:2) { # number of pollination days (blueberry days receptivity)
-                     message(paste('Starting day', k, 'of pollination'))
+                   t1 <- Sys.time()
+                   for (day in 1:2) { # number of pollination days (blueberry days receptivity)
                      
-                     for (j in seq_along(colmena)) { # bees on beehive 
+                     message(paste('Starting day', day, 'of pollination'))
+                     
+                     for (trips_bee in seq_along(hive)) { # trips per bee
                        
-                       for (i in 1:colmena[j]){ # foraging trips per bee
-                         
-                         plant_i <- round(runif(1, 1, p_ha)) # plant i
-                         
-                         flower_i <- round(runif(1, 1, length(plants[[plant_i]]))) # flower j
-                         
-                         plants[[plant_i]][flower_i] <- plants[[plant_i]][flower_i] + 1 # visit to ij
-                       }
+                       flower_id <- sample.int(sum_flowers, hive[trips_bee]) # visited flowers
+                       
+                       for (k in seq_along(pla)) flowers[flower_id[k]] <- flowers[flower_id[k]] + 1
+                       
                      }
+                     
                    }
+                   message(paste('Execution time:'))
+                   print(Sys.time() - t1)
+                   flowers
+                 })
+      
+      plants <- 
+        lapply(flowers, FUN = # iteration across flowers visited by bees from hive i
+                 function(visits_hive_i) {
                    
-                   plants
+                   lapply(plants, FUN = 
+                            function(plant_i) {
+                              
+                              sample(visits_hive_i, length(plant_i)) # asigns flower visits to each plant
+                              
+                            })
                    
                  })
       
@@ -764,19 +791,17 @@ p <- simulated_visits(p_ha = p_01ha,
                       hive_aggregate = T)
 Sys.time() - t1
 
-unlist(lapply(p$Hive1, sum), use.names = F)
-
 sum(p$Hive1$plant1)
 
 sum(p$Hive2$plant1) - sum(p$Hive1$plant1)
 
-sum(p$Hive20$plant1) - sum(p$Hive19$plant1)
+sum(p$Hive7$plant1) - sum(p$Hive6$plant1)
 
 length(p)
 
 par(mfrow = c(2, 2), mar = c(4.2, 4.2, 1.5, 1.5))
 
-plot(density(p$Hive1[[1]]), ylim = c(0, 10), xlim = c(-0.5, 6),
+plot(density(p$Hive1[[1]]), ylim = c(0, 4.5), xlim = c(-0.5, 5),
      xlab = paste('Honeybee visits per flower\n (density:', 
                   1, ' hive per ha)'), 
      lwd = 0.3, main = '', col = 1)
@@ -786,7 +811,7 @@ for (j in 1:100) {
 }
 
 
-plot(density(p$Hive7[[1]]), ylim = c(0, 2), xlim = c(-0.5, 15),
+plot(density(p$Hive7[[1]]), ylim = c(0, 0.5), xlim = c(-0.5, 11),
      xlab = paste('Honeybee visits per flower\n (density:', 
                   7, ' hive per ha)'), 
      lwd = 0.3, main = '', col = 2)
@@ -795,7 +820,7 @@ for (j in 1:100) {
   lines(density(p$Hive7[[j]]), col = 2, lwd = 0.3) 
 }
 
-plot(density(p$Hive14[[1]]), ylim = c(0, 0.8), xlim = c(-0.5, 30),
+plot(density(p$Hive14[[1]]), ylim = c(0, 0.25), xlim = c(-0.5, 17),
      xlab = paste('Honeybee visits per flower\n (density:', 
                   14, ' hive per ha)'), 
      lwd = 0.3, main = '', col = 3)
@@ -804,7 +829,7 @@ for (j in 1:100) {
   lines(density(p$Hive14[[j]]), col = 3, lwd = 0.3) 
 }
 
-plot(density(p$Hive20[[1]]), ylim = c(0, 0.45), xlim = c(-0.5, 40),
+plot(density(p$Hive20[[1]]), ylim = c(0, 0.2), xlim = c(-0.5, 20),
      xlab = paste('Honeybee visits per flower\n (density:', 
                   20, ' hive per ha)'), 
      lwd = 0.3, main = '', col = 4)
@@ -824,6 +849,22 @@ for (i in seq_along(p)) {
         lwd = 0.5, col = i)
 }
 
+lapply(p$output$Hive3, 
+       FUN = function(x) quantile(x))
+
+filt <- unlist(lapply(p$output$Hive3, 
+                      FUN = function(x) quantile(x)[2] > 2), 
+               use.names = F)
+
+outpu <- p$output$Hive2[filt]
+
+record <- p$cont[[7]][filt]
+
+p$output$Hive1$plant3
+
+plot(density(outpu$plant3))
+record$plant3
+length(p$cont[[4]])
 
 vis_cult <- 
   lapply(p, FUN = 
