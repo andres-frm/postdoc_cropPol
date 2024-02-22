@@ -193,7 +193,7 @@ mod_visit_honeybee$summary()
 
 output_mod_visit_honeybee <- mod_visit_honeybee$summary()
 
-trace_plot <- function (fit, par, n_chains) {
+trace_plot <- function(fit, par, n_chains) {
   
   d <- as_mcmc.list(fit)
   
@@ -240,7 +240,7 @@ lines(density(visit_span), col = 'red', lwd = 2)
 
 time_visit_honeybee <- as.vector(ppcheck_visit_honeybee)
 
-lines(density(time_visit_honeybee), col = 'tan1', lwd = 3)
+plot(density(time_visit_honeybee), col = 'tan1', lwd = 3)
 
 # ======== foraging trip per day ======
 
@@ -660,6 +660,8 @@ simulated_visits <-
            bees_hive, # number of hives and honeybees per hive
            hive_aggregate = F, # if T same plants are visited by all hives 
                                # if F each hive has its own plants
+           short = F, # if TRUE return averaged values per plant instead of total 
+                      # flowers
            seed = 123) {
     
     set.seed(seed)
@@ -778,7 +780,42 @@ simulated_visits <-
     
     names(plants) <- paste('Hive', 1:length(plants), sep = '')
     
-    return(plants)
+    if (short) {
+      
+      message('Starting averagin visits across plants')
+      
+      plants_mu <- 
+        lapply(plants, FUN = 
+                 function(x) {
+                   
+                   t <- unlist(lapply(x, mean), use.names = F)
+                   
+                   tibble(plant = paste('plant', 1:length(t), sep = ''), 
+                          visits = t)
+                   
+                 })
+      
+      for (i in seq_along(plants_mu)) {
+        plants_mu[[i]]$n_hives <- paste(i)
+      }
+      
+      plants_mu <- do.call('rbind', plants_mu)
+      
+      plants_mu <- 
+        plants_mu |> 
+        group_by(n_hives) |> 
+        transmute(mu = median(visits), 
+                  li = quantile(visits, 0.025),
+                  ls = quantile(visits, 0.975)) |> 
+        unique()
+      
+      return(plants_mu)
+      
+    } else {
+      
+      return(plants)
+      
+    }
     
   }
 
@@ -813,7 +850,7 @@ for (j in 1:100) {
 
 plot(density(p$Hive7[[1]]), ylim = c(0, 0.5), xlim = c(-0.5, 11),
      xlab = paste('Honeybee visits per flower\n (density:', 
-                  7, ' hive per ha)'), 
+                  7, ' hives per ha)'), 
      lwd = 0.3, main = '', col = 2)
 
 for (j in 1:100) {
@@ -822,7 +859,7 @@ for (j in 1:100) {
 
 plot(density(p$Hive14[[1]]), ylim = c(0, 0.25), xlim = c(-0.5, 17),
      xlab = paste('Honeybee visits per flower\n (density:', 
-                  14, ' hive per ha)'), 
+                  14, ' hives per ha)'), 
      lwd = 0.3, main = '', col = 3)
 
 for (j in 1:100) {
@@ -831,7 +868,7 @@ for (j in 1:100) {
 
 plot(density(p$Hive20[[1]]), ylim = c(0, 0.2), xlim = c(-0.5, 20),
      xlab = paste('Honeybee visits per flower\n (density:', 
-                  20, ' hive per ha)'), 
+                  20, ' hives per ha)'), 
      lwd = 0.3, main = '', col = 4)
 
 for (j in 1:100) {
@@ -841,45 +878,31 @@ for (j in 1:100) {
 par(mfrow = c(1, 1))
 
 
-plot(density(unlist(lapply(p$Hive20, median), use.names = F)), 
-     xlim = c(0, 40), main = '', lwd = 0, ylim = c(0, 0.25), 
-     xlab = 'Number of honeybee visits per flower')
-for (i in seq_along(p)) {
-  lines(density(unlist(lapply(p[[i]], median), use.names = F)), 
-        lwd = 0.5, col = i)
-}
-
-lapply(p$output$Hive3, 
-       FUN = function(x) quantile(x))
-
-filt <- unlist(lapply(p$output$Hive3, 
-                      FUN = function(x) quantile(x)[2] > 2), 
-               use.names = F)
-
-outpu <- p$output$Hive2[filt]
-
-record <- p$cont[[7]][filt]
-
-p$output$Hive1$plant3
-
-plot(density(outpu$plant3))
-record$plant3
-length(p$cont[[4]])
-
 vis_cult <- 
-  lapply(p, FUN = 
-           function(x) {
-             
-             t <- unlist(lapply(x, median), use.names = F)
-             
-             tibble(plant = paste('plant', 1:length(t), sep = ''), 
-                    visits = t)
-             
-           })
+  replicate(50, simulated_visits(p_ha = p_01ha,
+                                flowers_plant = total_flowers, 
+                                visits_bee = visits_day, 
+                                bees_hive = hives_ha(20, 
+                                                     seed = rnbinom(1, 
+                                                                    size = 1, 
+                                                                    mu = 400)), 
+                                hive_aggregate = T, 
+                                short = T), simplify = 'list')
 
-for (i in seq_along(vis_cult)) {
-  vis_cult[[i]]$n_hives <- paste(i)
-}
+vis_cult <- lapply(1:2, FUN = 
+                     function(x) {
+                       
+                       t <- do.call('cbind', vis_cult[, x])
+                       
+                       t <- as_tibble(apply(t, 2, as.numeric))
+                       
+                       t$sim <- x
+                       
+                       t
+                       
+                     })
+
+
 
 vis_cult <- do.call('rbind', vis_cult)
 
@@ -892,6 +915,8 @@ vis_cult |>
   ggplot(aes(fct_reorder(n_hives, ls), mu, ymin = li, ymax = ls)) +
   geom_errorbar(width = 0) +
   geom_point() +
+  stat_summary(aes(group = 2), fun = 'mean', geom = 'line', 
+               linewidth = 0.1) +
   labs(x = 'Hive density per ha', y = 'Average floral visits per plant') +
   theme_bw() +
   theme(panel.grid = element_blank())
