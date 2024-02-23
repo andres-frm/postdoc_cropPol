@@ -48,7 +48,7 @@ ggdag(sim_mod) +
         axis.ticks = element_blank(), 
         axis.title = element_blank())
 
-# ========== Hive density and strensth ===========
+# ========== Hive density and strength ===========
 
 # Function to simulate hives, of population N and around 40% of foragers 
 # individuals. Number of bees is estimated from a NegBin distribution
@@ -285,9 +285,16 @@ visits_day <- N_foraging_trips(iter = 2e4,
                                time_per_visit = time_visit_honeybee)
 Sys.time() - t1
 
+t1 <- Sys.time()
+visits_day_HQ <- N_foraging_trips(iter = 2e4, 
+                               time_foragin = foraging_time_HQ, 
+                               time_per_visit = time_visit_honeybee)
+Sys.time() - t1
+
 
 plot(density(visits_day), main = '', xlab = 'Number of floral visits of\n a single forager honeybee bee per day',
-     lwd = 4, col = 'lightblue')
+     lwd = 4, col = 'lightblue', xlim = c(395, 2000))
+lines(density(visits_day_HQ), lwd = 4, col = 'tan1')
 
 # ====== Plants ha, flower density and percentage ======= 
 
@@ -664,6 +671,8 @@ simulated_visits <-
                       # flowers
            seed = 123) {
     
+    mins <- Sys.time()
+    
     set.seed(seed)
     plants <- sample(flowers_plant, p_ha, replace = T) # plants per ha 
     
@@ -698,7 +707,7 @@ simulated_visits <-
         lapply(foragers_visits, FUN = 
                  function (hive) {
                    
-                   t1 <- Sys.time()
+                   
                    for (day in 1:2) { # number of pollination days (blueberry days receptivity)
                      
                      message(paste('Starting day', day, 'of pollination'))
@@ -712,8 +721,7 @@ simulated_visits <-
                      }
                      
                    }
-                   message(paste('Execution time:'))
-                   print(Sys.time() - t1)
+                   
                    flowers
                  })
       
@@ -744,7 +752,7 @@ simulated_visits <-
         lapply(foragers_visits, FUN = 
                  function (hive) {
                    
-                   t1 <- Sys.time()
+                   
                    for (day in 1:2) { # number of pollination days (blueberry days receptivity)
                      
                      message(paste('Starting day', day, 'of pollination'))
@@ -753,13 +761,12 @@ simulated_visits <-
                        
                        flower_id <- sample.int(sum_flowers, hive[trips_bee]) # visited flowers
                        
-                       for (k in seq_along(pla)) flowers[flower_id[k]] <- flowers[flower_id[k]] + 1
+                       for (k in seq_along(flower_id)) flowers[flower_id[k]] <- flowers[flower_id[k]] + 1
                        
                      }
                      
                    }
-                   message(paste('Execution time:'))
-                   print(Sys.time() - t1)
+                   
                    flowers
                  })
       
@@ -809,10 +816,14 @@ simulated_visits <-
                   ls = quantile(visits, 0.975)) |> 
         unique()
       
+      message(paste('Toral execution time:'))
+      print(Sys.time() - mins)
       return(plants_mu)
       
     } else {
       
+      message(paste('Toral execution time:'))
+      print(Sys.time() - mins)
       return(plants)
       
     }
@@ -820,113 +831,153 @@ simulated_visits <-
   }
 
 
-t1 <- Sys.time()
-p <- simulated_visits(p_ha = p_01ha,
+
+vis_LQ <- simulated_visits(p_ha = p_01ha,
                       flowers_plant = total_flowers, 
                       visits_bee = visits_day, 
-                      bees_hive = hives_ha(20), 
+                      bees_hive = hives_ha(20, mu_pop = 10e3), 
                       hive_aggregate = T)
-Sys.time() - t1
 
-sum(p$Hive1$plant1)
 
-sum(p$Hive2$plant1) - sum(p$Hive1$plant1)
 
-sum(p$Hive7$plant1) - sum(p$Hive6$plant1)
+vis_HQ <- simulated_visits(p_ha = p_01ha,
+                         flowers_plant = total_flowers, 
+                         visits_bee = visits_day_HQ, 
+                         bees_hive = hives_ha(20, mu_pop = 20e3), 
+                         hive_aggregate = T)
 
-length(p)
 
 par(mfrow = c(2, 2), mar = c(4.2, 4.2, 1.5, 1.5))
 
-plot(density(p$Hive1[[1]]), ylim = c(0, 4.5), xlim = c(-0.5, 5),
-     xlab = paste('Honeybee visits per flower\n (density:', 
+plot(density(vis_LQ$Hive1[[1]]), ylim = c(0, 4), xlim = c(-0.5, 5),
+     xlab = paste('Honeybee visits per flower at crop level\n (density:', 
                   1, ' hive per ha)'), 
      lwd = 0.3, main = '', col = 1)
 
 for (j in 1:100) {
-  lines(density(p$Hive1[[j]]), col = 1, lwd = 0.3) 
+  lines(density(vis_LQ$Hive1[[j]]), col = 1, lwd = 0.3) 
 }
-
-
-plot(density(p$Hive7[[1]]), ylim = c(0, 0.5), xlim = c(-0.5, 11),
-     xlab = paste('Honeybee visits per flower\n (density:', 
-                  7, ' hives per ha)'), 
-     lwd = 0.3, main = '', col = 2)
 
 for (j in 1:100) {
-  lines(density(p$Hive7[[j]]), col = 2, lwd = 0.3) 
+  lines(density(vis_HQ$Hive1[[j]]), col = 2, lwd = 0.3) 
 }
 
-plot(density(p$Hive14[[1]]), ylim = c(0, 0.25), xlim = c(-0.5, 17),
-     xlab = paste('Honeybee visits per flower\n (density:', 
-                  14, ' hives per ha)'), 
-     lwd = 0.3, main = '', col = 3)
+text(x = c(4, 4), y = c(3, 3.25), c('Low quality', 'Hight quality'), 
+     col = 1:2)
+
+
+plot(density(vis_LQ$Hive7[[1]]), ylim = c(0, 0.45), xlim = c(-0.5, 20),
+     xlab = paste('Honeybee visits per flower at crop level\n (density:', 
+                  7, ' hive per ha)'), 
+     lwd = 0.3, main = '', col = 1)
 
 for (j in 1:100) {
-  lines(density(p$Hive14[[j]]), col = 3, lwd = 0.3) 
+  lines(density(vis_LQ$Hive7[[j]]), col = 1, lwd = 0.3) 
 }
-
-plot(density(p$Hive20[[1]]), ylim = c(0, 0.2), xlim = c(-0.5, 20),
-     xlab = paste('Honeybee visits per flower\n (density:', 
-                  20, ' hives per ha)'), 
-     lwd = 0.3, main = '', col = 4)
 
 for (j in 1:100) {
-  lines(density(p$Hive20[[j]]), col = 4, lwd = 0.3) 
+  lines(density(vis_HQ$Hive7[[j]]), col = 2, lwd = 0.3) 
 }
+
+text(x = c(15, 15), y = c(0.35, 0.4), c('Low quality', 'Hight quality'), 
+     col = 1:2)
+
+plot(density(vis_LQ$Hive14[[1]]), ylim = c(0, 0.21), xlim = c(-0.5, 35),
+     xlab = paste('Honeybee visits per flower at crop level\n (density:', 
+                  14, ' hive per ha)'), 
+     lwd = 0.3, main = '', col = 1)
+
+for (j in 1:100) {
+  lines(density(vis_LQ$Hive14[[j]]), col = 1, lwd = 0.3) 
+}
+
+for (j in 1:100) {
+  lines(density(vis_HQ$Hive14[[j]]), col = 2, lwd = 0.3) 
+}
+
+text(x = c(28, 28), y = c(0.15, 0.17), c('Low quality', 'Hight quality'), 
+     col = 1:2)
+
+plot(density(vis_LQ$Hive20[[1]]), ylim = c(0, 0.15), xlim = c(-0.5, 50),
+     xlab = paste('Honeybee visits per flower at crop level\n (density:', 
+                  20, ' hive per ha)'), 
+     lwd = 0.3, main = '', col = 1)
+
+for (j in 1:100) {
+  lines(density(vis_LQ$Hive20[[j]]), col = 1, lwd = 0.3) 
+}
+
+for (j in 1:100) {
+  lines(density(vis_HQ$Hive20[[j]]), col = 2, lwd = 0.3) 
+}
+
+text(x = c(35, 35), y = c(0.11, 0.12), c('Low quality', 'Hight quality'), 
+     col = 1:2)
+
 
 par(mfrow = c(1, 1))
 
 
-vis_cult <- 
-  replicate(50, simulated_visits(p_ha = p_01ha,
-                                flowers_plant = total_flowers, 
-                                visits_bee = visits_day, 
-                                bees_hive = hives_ha(20, 
-                                                     seed = rnbinom(1, 
-                                                                    size = 1, 
-                                                                    mu = 400)), 
-                                hive_aggregate = T, 
-                                short = T), simplify = 'list')
+p <- vector('list', 50)
 
-vis_cult <- lapply(1:2, FUN = 
-                     function(x) {
-                       
-                       t <- do.call('cbind', vis_cult[, x])
-                       
-                       t <- as_tibble(apply(t, 2, as.numeric))
-                       
-                       t$sim <- x
-                       
-                       t
-                       
-                     })
+names(p) <- paste('sim', 1:length(p), sep = '')
+
+for (i in seq_along(p)) {
+  
+  p[[i]] <- simulated_visits(p_ha = p_01ha,
+                             flowers_plant = total_flowers, 
+                             visits_bee = visits_day, 
+                             bees_hive = hives_ha(20, seed = i+500), 
+                             hive_aggregate = T, 
+                             short = T)
+  p[[i]]$sim <- paste('sim', i, sep = '')
+  
+  print(paste('simulation', i, ' done'))
+}
+
+p <- do.call('rbind', p) 
 
 
+p_HQ <- vector('list', 50)
 
-vis_cult <- do.call('rbind', vis_cult)
+names(p_HQ) <- paste('sim', 1:length(p_HQ), sep = '')
 
-vis_cult |> 
-  group_by(n_hives) |> 
-  transmute(mu = median(visits), 
-            li = quantile(visits, 0.025),
-            ls = quantile(visits, 0.975)) |> 
-  unique() |> 
-  ggplot(aes(fct_reorder(n_hives, ls), mu, ymin = li, ymax = ls)) +
-  geom_errorbar(width = 0) +
-  geom_point() +
-  stat_summary(aes(group = 2), fun = 'mean', geom = 'line', 
-               linewidth = 0.1) +
-  labs(x = 'Hive density per ha', y = 'Average floral visits per plant') +
+for (i in seq_along(p_HQ)) {
+  
+  p_HQ[[i]] <- simulated_visits(p_ha = p_01ha,
+                             flowers_plant = total_flowers, 
+                             visits_bee = visits_day_HQ, 
+                             bees_hive = hives_ha(20, mu_pop = 20e3, 
+                                                  seed = i+500), 
+                             hive_aggregate = T, 
+                             short = T)
+  p_HQ[[i]]$sim <- paste('sim', i, sep = '')
+  
+  print(paste('simulation', i, 'done'))
+}
+
+p_HQ <- do.call('rbind', p_HQ)
+
+p$quality <- 'low'
+p_HQ$quality <- 'hight'
+
+vis_hives <- rbind(p, p_HQ)
+
+unique(vis_hives$sim)
+
+vis_hives |> 
+  ggplot(aes(as.numeric(n_hives), mu, shape = sim,
+             ymin = li, ymax = ls, color = quality)) +
+  geom_line(alpha = 0.7) + #geom_ribbon(alpha = 0.2) +
+  labs(x = 'Hives per blueberry ha', 
+       y = 'Average flower visits per flower\n at crop level') +
+  scale_shape_manual(values = rep(1, 50)) +
+  scale_color_manual(values = c('lightblue3', 'tan1')) +
   theme_bw() +
-  theme(panel.grid = element_blank())
+  theme(legend.position = 'none', 
+        panel.grid = element_blank())
 
-t <- lapply(p, FUN = 
-              function(x) {
-                lapply(x, quantile)
-              })
 
-t$Hive7
 
 # ====== 5. Hoenybee pollen deposition ====
 apisSVP <- readRDS('honeybee_svpd_data.rds')
@@ -1047,8 +1098,6 @@ text(x = 2, y = 300, 'Optimal pollination')
 
 beta <- rnorm(20, 3, 0.5)
 alpha <- rnorm(20, 20, 5)
-plot(NULL, xlim = c(0, 20), ylim = c(0, 100))
-for (i in 1:50) curve(alpha[i] + beta[i]*x, add = T, lwd = 0.3)
 
 sim_visits <- lapply(sim_visits[1:2], function(x) x)
 
@@ -1168,8 +1217,14 @@ pollen_deposition_fun <- function(x, mu_est = T, n_posterior = 10) {
   }
 }
 
-pollen_deposition <- 
-  lapply(p, FUN = 
+pollen_deposition_LQ <- 
+  lapply(vis_LQ, FUN = 
+           function(x) {
+             lapply(x, pollen_deposition_fun)
+           })
+
+pollen_deposition_HQ <- 
+  lapply(vis_HQ, FUN = 
            function(x) {
              lapply(x, pollen_deposition_fun)
            })
@@ -1177,51 +1232,91 @@ pollen_deposition <-
 
 par(mfrow = c(2, 2))
 
-plot(density(pollen_deposition$Hive1[[1]]), ylim = c(0, 0.2), 
-     xlim = c(-10, 159),
-     xlab = paste('Pollen deposition per flower', 
+plot(density(pollen_deposition_LQ$Hive1[[1]]), ylim = c(0, 0.06), 
+     xlim = c(-20, 170),
+     xlab = paste('Pollen deposition per flower at farm level', 
                   '(1 hive per ha)'), 
      lwd = 0.3, main = '', col = 1)
 
 for (j in 1:100) {
-  lines(density(pollen_deposition$Hive1[[j]]), col = 1, lwd = 0.3) 
+  lines(density(pollen_deposition_LQ$Hive1[[j]]), col = 1, lwd = 0.3) 
 }
-
-
-plot(density(pollen_deposition$Hive7[[1]]), ylim = c(0, 0.05), 
-     xlim = c(-10, 300),
-     xlab = paste('Pollen deposition per flower', 
-                  '(7 hives per ha)'), 
-     lwd = 0.3, main = '', col = 2)
 
 for (j in 1:100) {
-  lines(density(pollen_deposition$Hive7[[j]]), col = 2, lwd = 0.3) 
+  lines(density(pollen_deposition_HQ$Hive1[[j]]), col = 2, lwd = 0.3) 
 }
 
 
-plot(density(pollen_deposition$Hive14[[1]]), ylim = c(0, 0.1), 
+plot(density(pollen_deposition_LQ$Hive7[[1]]), ylim = c(0, 0.025), 
+     xlim = c(-10, 300),
+     xlab = paste('Pollen deposition per flower at farm level', 
+                  '(7 hives per ha)'), 
+     lwd = 0.3, main = '', col = 1)
+
+for (j in 1:100) {
+  lines(density(pollen_deposition_LQ$Hive7[[j]]), col = 1, lwd = 0.3) 
+}
+
+for (j in 1:100) {
+  lines(density(pollen_deposition_HQ$Hive7[[j]]), col = 2, lwd = 0.3) 
+}
+
+
+plot(density(pollen_deposition_LQ$Hive14[[1]]), ylim = c(0, 0.025), 
      xlim = c(-10, 300),
      xlab = paste('Pollen deposition per flower', 
                   '(14 hives per ha)'), 
-     lwd = 0.3, main = '', col = 3)
+     lwd = 0.3, main = '', col = 1)
 
 for (j in 1:100) {
-  lines(density(pollen_deposition$Hive14[[j]]), col = 3, lwd = 0.3) 
+  lines(density(pollen_deposition_LQ$Hive14[[j]]), col = 1, lwd = 0.3) 
 }
 
-plot(density(pollen_deposition$Hive20[[1]]), ylim = c(0, 0.1), 
+for (j in 1:100) {
+  lines(density(pollen_deposition_HQ$Hive14[[j]]), col = 2, lwd = 0.3) 
+}
+
+
+plot(density(pollen_deposition_LQ$Hive20[[1]]), ylim = c(0, 0.05), 
      xlim = c(-10, 300),
      xlab = paste('Pollen deposition per flower', 
                   '(20 hives per ha)'), 
-     lwd = 0.4, main = '', col = 3)
+     lwd = 0.4, main = '', col = 1)
 
 for (j in 1:100) {
-  lines(density(pollen_deposition$Hive20[[j]]), col = 4, lwd = 0.3) 
+  lines(density(pollen_deposition_LQ$Hive20[[j]]), col = 1, lwd = 0.3) 
 }
+
+for (j in 1:100) {
+  lines(density(pollen_deposition_HQ$Hive20[[j]]), col = 2, lwd = 0.3) 
+}
+
 
 par(mfrow = c(1, 1))
 
-
+crop_pollination <- function(p_ha, # plants per ha
+                             flowers_plant, # total flowers per plant
+                             beta1 = 6, #flowering percentage (par 1 beta distribution) 
+                             beta2 = 4, #flowering percentage (par 2 beta distribution) 
+                             visits_bee, # visits per honeybee individual
+                             bees_hive, # number of hives and honeybees per hive
+                             hive_aggregate = F, # if T same plants are visited by all hives 
+                             # if F each hive has its own plants
+                             # flowers
+                             seed = 123) {
+  
+  visits <- 
+    simulated_visits(p_ha,
+                     flowers_plant,
+                     beta1,
+                     beta2,
+                     visits_bee,
+                     bees_hive,
+                     hive_aggregate,
+                     short = F, 
+                     seed)
+  
+}
 
 # ============= 7. Pollen to fruit =====
 
