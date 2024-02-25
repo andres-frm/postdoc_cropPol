@@ -1,5 +1,5 @@
 pks <- c('tidyverse', 'rethinking', 'rstan', 'magrittr', 'cmdstanr',
-         'ggdag', 'dagitty', 'readxl', 'brms')
+         'ggdag', 'dagitty', 'readxl', 'brms', 'cowplot')
 sapply(pks, library, character.only = T)
 
 
@@ -1300,10 +1300,13 @@ crop_pollination <- function(p_ha, # plants per ha
                              beta2 = 4, #flowering percentage (par 2 beta distribution) 
                              visits_bee, # visits per honeybee individual
                              bees_hive, # number of hives and honeybees per hive
-                             hive_aggregate = F, # if T same plants are visited by all hives 
+                             hive_aggregate = T, # if T same plants are visited by all hives 
                              # if F each hive has its own plants
                              # flowers
                              seed = 123) {
+  
+  message('Starting floral visits')
+  t1 <- Sys.time()
   
   visits <- 
     simulated_visits(p_ha,
@@ -1316,25 +1319,327 @@ crop_pollination <- function(p_ha, # plants per ha
                      short = F, 
                      seed)
   
+  message('Starting pollen deposition')
+  PD <- 
+    lapply(visits, FUN = 
+             function(x) {
+               lapply(x, pollen_deposition_fun)
+             })
+  
+  PD <- 
+    lapply(PD, FUN = 
+             function(x) {
+               
+               t <- unlist(lapply(x, mean), use.names = F)
+               
+               tibble(plant = paste('plant', 1:length(t), sep = ''), 
+                      pollen = t)
+               
+             })
+  
+  for (i in seq_along(PD)) {
+    PD[[i]]$n_hives <- paste(i)
+  }
+  
+  PD <- do.call('rbind', PD)
+  
+  PD <- 
+    PD |> 
+    group_by(n_hives) |> 
+    transmute(mu = median(pollen), 
+              li = quantile(pollen, 0.025),
+              ls = quantile(pollen, 0.975)) |> 
+    unique()
+  
+  message('Total execution time:')
+  print(Sys.time() - t1)
+  return(PD)
+  
 }
 
+pollen_LQ <- vector('list', 50)
+
+names(pollen_LQ) <- paste('sim', 1:length(pollen_LQ), sep = '')
+
+for (i in seq_along(pollen_LQ)) {
+  
+  pollen_LQ[[i]] <- crop_pollination(p_ha = p_01ha,
+                                     flowers_plant = total_flowers, 
+                                     visits_bee = visits_day, 
+                                     bees_hive = hives_ha(20, seed = i+500), 
+                                     hive_aggregate = T)
+  pollen_LQ[[i]]$sim <- paste('sim', i, sep = '')
+  
+  print(paste('simulation', i, 'done'))
+}
+
+pollen_LQ <- do.call('rbind', pollen_LQ) 
+
+pollen_HQ <- vector('list', 50)
+
+names(pollen_HQ) <- paste('sim', 1:length(pollen_HQ), sep = '')
+
+for (i in seq_along(pollen_HQ)) {
+  
+  pollen_HQ[[i]] <- crop_pollination(p_ha = p_01ha,
+                                     flowers_plant = total_flowers, 
+                                     visits_bee = visits_day_HQ, 
+                                     bees_hive = hives_ha(20, mu_pop = 20e3, 
+                                                          seed = i+500), 
+                                     hive_aggregate = T)
+  
+  pollen_HQ[[i]]$sim <- paste('sim', i, sep = '')
+  
+  print(paste('simulation', i, 'done'))
+}
+
+pollen_HQ <- do.call('rbind', pollen_HQ)
+
+pollen_LQ$quality <- 'low'
+pollen_HQ$quality <- 'hight'
+
+pollen_hives <- rbind(pollen_LQ, pollen_HQ)
+
+vis_hives |> 
+  ggplot(aes(as.numeric(n_hives), mu, shape = sim,
+             ymin = li, ymax = ls, color = quality)) +
+  geom_line(alpha = 0.7) + #geom_ribbon(alpha = 0.2) +
+  labs(x = 'Hives per blueberry ha', 
+       y = 'Average flower visits per flower\n at crop level') +
+  scale_shape_manual(values = rep(1, 50)) +
+  scale_color_manual(values = c('lightblue3', 'tan1')) +
+  theme_bw() +
+  theme(legend.position = 'none', 
+        panel.grid = element_blank())
+
+pollen_hives |> 
+  ggplot(aes(as.numeric(n_hives), mu, shape = sim,
+             ymin = li, ymax = ls, color = quality)) +
+  geom_line(alpha = 0.7) + #geom_ribbon(alpha = 0.2) +
+  labs(x = 'Hives per blueberry ha', 
+       y = 'Average pollen deposition per flower\n at crop level') +
+  scale_shape_manual(values = rep(1, 50)) +
+  scale_color_manual(values = c('lightblue3', 'tan1')) +
+  geom_hline(yintercept = c(112, 274), linetype = 2, color = 'red') +
+  theme_bw() +
+  theme(legend.position = 'none', 
+        panel.grid = element_blank())
+
+plot_grid(vis_hives |> 
+            ggplot(aes(as.numeric(n_hives), mu, shape = sim,
+                       ymin = li, ymax = ls, color = quality)) +
+            geom_line(alpha = 0.5, linewidth = 0.3) + #geom_ribbon(alpha = 0.2) +
+            labs(x = 'Hives per blueberry ha', 
+                 y = 'Average flower visits per flower\n at crop level') +
+            scale_shape_manual(values = rep(1, 50)) +
+            scale_color_manual(values = c('lightblue3', 'tan1')) +
+            theme_bw() +
+            theme(legend.position = 'none', 
+                  panel.grid = element_blank()), 
+          pollen_hives |> 
+            ggplot(aes(as.numeric(n_hives), mu, shape = sim,
+                       ymin = li, ymax = ls, color = quality)) +
+            geom_line(alpha = 0.5, linewidth = 0.3) + #geom_ribbon(alpha = 0.2) +
+            labs(x = 'Hives per blueberry ha', 
+                 y = 'Average pollen deposition per flower\n at crop level') +
+            scale_shape_manual(values = rep(1, 50)) +
+            scale_color_manual(values = c('lightblue3', 'tan1')) +
+            geom_hline(yintercept = c(112, 274), linetype = 2, color = 'red') +
+            theme_bw() +
+            theme(legend.position = 'none', 
+                  panel.grid = element_blank()), 
+          ncol = 2)
+
+ggsave('simulation_visit_pollen.jpg', width = 16, height = 10, units = 'cm', dpi = 700)
+
 # ============= 7. Pollen to fruit =====
+
+fruit_size <- readRDS('fruit_size.rds')
+
+fruit_size <- fruit_size[fruit_size$fruit_diameter >5, ]
+
+fruit_size <- na.omit(fruit_size[, -ncol(fruit_size)])
+
+mod_fruit_size <- fruit_size %$% lm(fruit_weight ~ fruit_diameter)
+
+summary(mod_fruit_size)
+
+predict.lm(mod_fruit_size, newdata = list(fruit_diameter = 7))
+
+fruit_size %$% plot(fruit_weight ~ fruit_diameter)
+abline(mod_fruit_size)
+
+mod_fruit_size <- 
+  ulam(
+    alist(
+      fruit_weight ~ dnorm(mu, sigma),
+      mu <- alpha + beta*fruit_diameter,
+      alpha ~ dnorm(0, 1), 
+      beta ~ dnorm(0.5, 0.2),
+      sigma ~ dexp(1)
+    ), data = 
+      list(
+        fruit_diameter = fruit_size$fruit_diameter, 
+        fruit_weight = fruit_size$fruit_weight
+      ), chains = 3, cores = 3, iter = 2e3, warmup = 500
+  )
+
+precis(mod_fruit_size)
+
+production_function <- function(x) {
+  fruit_diameter <- (7.23 - (1.9e-4*x^2) + (0.076*x))+3 # arreglar esto!!!!!
+  return(-1.9 + 0.26*fruit_diameter) # arreglaaaaaaaaar
+  
+}
+
+production_function(200)
+
+
+pollen_deposition_LQ <- 
+  lapply(pollen_deposition_LQ, FUN = 
+           function(x) {
+             lapply(x, FUN = 
+                      function(j) {
+                        
+                        fruto <- sapply(j, FUN = 
+                                          function(k) {
+                                            if(k == 0) 0
+                                            else production_function(k)
+                                          })
+                        sum(fruto)/1e3
+                      })
+           })
+
+pollen_deposition_HQ <- 
+  lapply(pollen_deposition_HQ, FUN = 
+           function(x) {
+             lapply(x, FUN = 
+                      function(j) {
+                        
+                        fruto <- sapply(j, FUN = 
+                                          function(k) {
+                                            if(k == 0) 0
+                                            else production_function(k)
+                                          })
+                        sum(fruto)/1e3
+                      })
+           })
+
+
+pollen_deposition_HQ <- 
+  lapply(1:length(pollen_deposition_HQ), FUN = 
+           function(x) {
+             
+             t <- unlist(pollen_deposition_HQ[x], use.names = F)
+             
+             tibble(kg = t, 
+                    hive = paste(x), 
+                    quality = 'Hight')
+             
+           })
+
+pollen_deposition_LQ <- 
+  lapply(1:length(pollen_deposition_LQ), FUN = 
+           function(x) {
+             
+             t <- unlist(pollen_deposition_LQ[x], use.names = F)
+             
+             tibble(kg = t, 
+                    hive = paste(x), 
+                    quality = 'Hight')
+             
+           })
+
+pollen_deposition_LQ <- do.call('rbind', pollen_deposition_LQ)
+pollen_deposition_LQ$quality <- 'Low'
+pollen_deposition_HQ <- do.call('rbind', pollen_deposition_HQ)
+
+production <- rbind(pollen_deposition_HQ, 
+                    pollen_deposition_LQ)
+
+production$hive <- as.factor(production$hive)
+production$hive <- factor(production$hive, 
+                          levels = as.character(sort(as.numeric(levels(production$hive)))))
+
+production <- split(production, list(production$quality, 
+                                     production$hive))
+
+production$Hight.1
+
+production <- lapply(production, FUN = 
+                       function(x) {
+                         
+                         v <- vector('double', 2e3)
+                         
+                         for (i in 1:2e3) {
+                           v[[i]] <- sum(sample(x$kg, p_01ha, replace = T))
+                         }
+                         
+                         v <- v/1e3
+                         
+                         tibble(mu = mean(v), 
+                                li = quantile(v, 0.025), 
+                                ls = quantile(v, 0.975), 
+                                hive = x$hive[[1]],
+                                quality = x$quality[[1]])
+                       })
+
+production <- do.call('rbind', production)
+
+production |> 
+  ggplot() +
+  geom_line(data = production[production$quality == 'Low', ], 
+            aes(hive, mu, group = 1), color = 'tan1') +
+  geom_vline(xintercept = c(4, 9, 10, 13), linetype = 2, col = 'red') +
+  geom_point(data = production[production$quality == 'Low', ], 
+             aes(hive, mu), color = 'tan1') +
+  geom_errorbar(data = production[production$quality == 'Low', ], 
+                aes(hive, mu, ymin = li, ymax = ls), width = 0, 
+                color = 'tan1') +
+  geom_line(data = production[production$quality == 'Hight', ], 
+            aes(hive, mu, group = 1), color = 'lightblue3') +
+  geom_point(data = production[production$quality == 'Hight', ], 
+             aes(hive, mu), color = 'lightblue3') +
+  geom_errorbar(data = production[production$quality == 'Hight', ], 
+                aes(hive, mu, ymin = li, ymax = ls), width = 0, 
+                color = 'lightblue3') +
+  labs(x = 'Hive density per blueberry ha', y = 'Average production per ha (t)') +
+  theme_bw() +
+  theme(legend.position = 'top', 
+        panel.grid = element_blank())
+
+ggsave('production_preliminary.jpg', width = 14, height = 8, 
+       units = 'cm', dpi = 700)
+
+quantile(unlist(pollen_deposition_HQ$Hive5, use.names = F))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 optimal_model <- bf(fruto_diam ~ carga_poli + carga_poli2 + tratamiento)
 
 get_prior(optimal_model, data = pollen_fruit, family = "Gaussian")
 
 prior_optMod <- c(set_prior('normal(5, 3)', class = 'Intercept'),
-                  set_prior('normal(0, 1)', class = 'b', coef = 'tratamientocs'),
-                  set_prior('normal(0, 1)', class = 'b', coef = 'tratamientol'),
-                  set_prior('normal(0, 1)', class = 'b', coef = 'tratamientols'),
                   set_prior('normal(0, 0.2)', class = 'b', coef = 'carga_poli'),
                   set_prior('normal(0, 0.2)', class = 'b', coef = 'carga_poli2'),
                   set_prior('exponential(1)', class = 'sigma'))
 
-optim_model <- brm(formula = optimal_model, data = modelo, family = gaussian,
+optim_model <- brm(formula = optimal_model, data = pollen_fruit, family = gaussian,
                    prior = prior_optMod, future = T, chains = 3,
-                   thin = 3, iter = 25e3, warmup =  500, seed = 222)
+                   thin = 3, iter = 6e3, warmup =  500, seed = 222)
 
 summary(optim_model)
 
