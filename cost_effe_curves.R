@@ -513,7 +513,7 @@ mod_fs_exp <-
     chains = 3, 
     parallel_chains = 3, 
     iter_warmup = 500, 
-    iter_sampling = 5e3,
+    iter_sampling = 10e3,
     thin = 3,
     seed = 123,
     refresh = 200
@@ -523,7 +523,7 @@ output_mod_fruitset <- mod_fs_exp$summary()
 
 mod_diagnostics(mod_fs_exp, output_mod_fruitset)
 
-output_mod_fruitset |> print(n = 464)
+output_mod_fruitset |> filter(ess_tail < 1000)
 
 trace_plot(mod_fs_exp, output_mod_fruitset$variable[1], 3)
 
