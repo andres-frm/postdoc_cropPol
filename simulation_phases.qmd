@@ -529,7 +529,7 @@ names(plants) <- paste('Hive', 1:length(plants), sep = '')
 ```
 
 ```{r}
-plants <- readRDS('1_hive_1HA.rds')
+#plants <- readRDS('1_hive_1HA.rds')
 ```
 
 Let me show 4four replicates of the visits given one low-quality hive per ha:

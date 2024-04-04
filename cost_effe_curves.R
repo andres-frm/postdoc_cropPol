@@ -385,7 +385,7 @@ dat_fs$N_year <- length(unique(dat_fs$year_id))
 plot(density(rnorm(1e3, 50, 25)))
 
 cat(file = 'fruit_set.stan', 
-    '
+    "
     data{
       int N;
       int N_site;
@@ -405,37 +405,103 @@ cat(file = 'fruit_set.stan',
     }
     
     parameters{
-      vector[N_year] year;
-      vector[N_site] locality;
-      vector[N_farm] farm;
-      vector[N_plant] plant;
-      //vector[N_branch] branch;
       vector[N_treatment] t;
+      
+      matrix[N_treatment, N_year] Z_year;
+      cholesky_factor_corr[N_treatment] R_year;
+      vector<lower = 0>[N_treatment] sigma_year;
+      
+      matrix[N_treatment, N_site] Z_locality;
+      cholesky_factor_corr[N_treatment] R_locality;
+      vector<lower = 0>[N_treatment] sigma_locality;
+    
+      matrix[N_treatment, N_farm] Z_farm;
+      cholesky_factor_corr[N_treatment] R_farm;
+      vector<lower = 0>[N_treatment] sigma_farm;
+    
+      matrix[N_treatment, N_plant] Z_plant;
+      cholesky_factor_corr[N_treatment] R_plant;
+      vector<lower = 0>[N_treatment] sigma_plant;
+      
+      //vector[N_branch] branch;
+      
+    }
+    
+    transformed parameters{
+      matrix[N_year, N_treatment] year;
+      matrix[N_site, N_treatment] locality;
+      matrix[N_farm, N_treatment] farm;
+      matrix[N_plant, N_treatment] plant;
+    
+      year = (diag_pre_multiply(sigma_year, R_year) * Z_year)';
+      locality = (diag_pre_multiply(sigma_locality, R_locality) * Z_locality)';
+      farm = (diag_pre_multiply(sigma_farm, R_farm) * Z_farm)';
+      plant = (diag_pre_multiply(sigma_plant, R_plant) * Z_plant)';
     }
     
     model{
       vector[N] p;
-      year ~ normal(0, 1);
-      locality ~ normal(0, 1);
-      farm ~ normal(0, 1);
-      plant ~ normal(0, 1);
-      //branch ~ normal(0, 1);
       t ~ normal(0, 1);
+    
+      to_vector(Z_year) ~ normal(0, 1);
+      R_year ~ lkj_corr_cholesky(2);
+      sigma_year ~ exponential(1);
+    
+      to_vector(Z_locality) ~ normal(0, 1);
+      R_locality ~ lkj_corr_cholesky(2);
+      sigma_locality ~ exponential(1);
+    
+      to_vector(Z_farm) ~ normal(0, 1);
+      R_farm ~ lkj_corr_cholesky(2);
+      sigma_farm ~ exponential(1);
+    
+      to_vector(Z_plant) ~ normal(0, 1);
+      R_plant ~ lkj_corr_cholesky(2);
+      sigma_plant ~ exponential(1);
+      //branch ~ normal(0, 1);
     
       for (i in 1:N) {
         p[i] = t[treatment[i]] + 
-                locality[locality_id[i]] + 
-                farm[farm_id[i]] +
-                plant[plant_id[i]] +
-                //branch[branch_id[i]] +
-                year[year_id[i]]; 
+                locality[locality_id[i], treatment[i]] + 
+                farm[farm_id[i], treatment[i]] +
+                plant[plant_id[i], treatment[i]] +
+                year[year_id[i], treatment[i]]; 
         
         p[i] = inv_logit(p[i]);
       }
       
       fruits ~ binomial(flowers, p);
     }
-    ')
+    
+    generated quantities{
+      vector[N] log_lik;
+      vector[N] p1;
+      array[N] int ppcheck;
+      matrix[N_treatment, N_treatment] Rho_year;
+      matrix[N_treatment, N_treatment] Rho_locality;
+      matrix[N_treatment, N_treatment] Rho_farm;
+      matrix[N_treatment, N_treatment] Rho_plant;
+    
+      Rho_year = multiply_lower_tri_self_transpose(R_year);
+      Rho_locality = multiply_lower_tri_self_transpose(R_locality);
+      Rho_farm = multiply_lower_tri_self_transpose(R_farm);
+      Rho_plant = multiply_lower_tri_self_transpose(R_plant);
+    
+      for (i in 1:N) {
+        p1[i] = t[treatment[i]] + 
+                locality[locality_id[i], treatment[i]] + 
+                farm[farm_id[i], treatment[i]] +
+                plant[plant_id[i], treatment[i]] +
+                year[year_id[i], treatment[i]]; 
+        
+        p1[i] = inv_logit(p1[i]);
+      }
+      
+      for (i in 1:N) log_lik[i] = binomial_lpmf(fruits[i] | flowers[i], p1[i]);
+    
+      ppcheck = binomial_rng(flowers, p1);
+    }
+    ")
 
 file <- paste(getwd(), '/fruit_set.stan', sep = '')
 
@@ -447,13 +513,15 @@ mod_fs_exp <-
     chains = 3, 
     parallel_chains = 3, 
     iter_warmup = 500, 
-    iter_sampling = 2e3,
+    iter_sampling = 5e3,
     thin = 3,
     seed = 123,
     refresh = 200
   )
 
 output_mod_fruitset <- mod_fs_exp$summary() 
+
+mod_diagnostics(mod_fs_exp, output_mod_fruitset)
 
 output_mod_fruitset |> print(n = 464)
 
