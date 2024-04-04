@@ -1,7 +1,11 @@
 pks <- c('tidyverse', 'rethinking', 'rstan', 'magrittr', 'cmdstanr',
          'ggdag', 'dagitty', 'readxl', 'brms', 'cowplot')
+
 sapply(pks, library, character.only = T)
 
+options(mc.core = parallel::detectCores())
+
+source('functions_mod_diagnostics.r')
 
 sim_mod <- 
   dagify(Y ~ FW + nF, 
@@ -151,25 +155,56 @@ visit_span <- readRDS('honeybee_visit_span.rds')
 visit_span <- visit_span$A_mellifera
 
 plot(density(rlnorm(1e3, exp(0.5), exp(0.1))))
-plot(density(rgamma(1e3, 10/2, 1/2)))
+plot(density(rgamma(1e3, exp(2)/2, 1/2)))
 
 cat(file = 'honeybee_visit.stan', 
     '
     data{
       int N;
       vector[N] visit;
+      array[N] int individual;
     }
     
     parameters{
+      vector[N] z_alpha;
       real<lower = 0> mu;
       real<lower = 0> sigma;
+      real<lower = 0> sigma1;
+    }
+    
+    transformed parameters{
+      vector[N] alpha;
+      alpha = mu + z_alpha * sigma1;
     }
     
     model{
-      mu ~ normal(10, 2.5);
+      vector[N] p;
+      mu ~ normal(7, 2);
       sigma ~ exponential(1);
+      sigma1 ~ exponential(1);
+      z_alpha ~ normal(0, 1);
+    
+      for (i in 1:N) {
+        p[i] = alpha[individual[i]];
+        p[i] = exp(p[i]);
+      }
       
-      visit ~ gamma(mu/sigma, 1/sigma);
+      visit ~ gamma(p/sigma, 1/sigma);
+    }
+    
+    generated quantities{
+      vector[N] log_lik;
+      vector[N] p;
+      array[N] real ppcheck;
+      
+      for (i in 1:N) {
+        p[i] = alpha[individual[i]];
+        p[i] = exp(p[i]);
+      }
+    
+      for (i in 1:N) log_lik[i] = gamma_lpdf(visit[i] | p[i]/sigma, 1/sigma);
+    
+      ppcheck = gamma_rng(p/sigma, 1/sigma);
     }
     ')
 
@@ -179,8 +214,9 @@ fit_visit_honeybee <- cmdstan_model(file, compile = T)
 mod_visit_honeybee <- 
   fit_visit_honeybee$sample(
     data = list(visit = visit_span, 
-                N = length(visit_span)),
-    iter_sampling = 2e3, 
+                N = length(visit_span), 
+                individual = 1:length(visit_span)),
+    iter_sampling = 30e3, 
     iter_warmup = 500, 
     chains = 3, 
     parallel_chains = 3, 
@@ -189,54 +225,22 @@ mod_visit_honeybee <-
     refresh = 500
   )
 
-mod_visit_honeybee$summary()
+(output_mod_visit_honeybee <- mod_visit_honeybee$summary())
 
-output_mod_visit_honeybee <- mod_visit_honeybee$summary()
+mod_diagnostics(mod_visit_honeybee, output_mod_visit_honeybee)
 
-trace_plot <- function(fit, par, n_chains) {
-  
-  d <- as_mcmc.list(fit)
-  
-  d <- lapply(d, FUN = 
-                function(x) {
-                  x <- as.data.frame(unclass(as.matrix(x)))
-                  x$iter <- 1:nrow(x)
-                  x
-                })
-  
-  for (i in 1:n_chains) d[[i]]$chain <- i
-  
-  plot(d[[1]][, 'iter', drop = T], d[[1]][, par, drop = T], 
-       type = 'l', col = 1, main = '', ylab = par, 
-       xlab = 'Iteration')
-  for (i in 2:n_chains) {
-    lines(d[[i]][, 'iter', drop = T], d[[i]][, par, drop = T], 
-          col = i, main = '', ylab = par, 
-          xlab = 'Iteration')
-  }
-  
-} 
-
-post_visit_honeybee <- mod_visit_honeybee$draws(format = 'df')
-
-par(mfrow = c(1, 2))
-for (i in 2:3) trace_plot(mod_visit_honeybee, output_mod_visit_honeybee$variable[i], 3)
+par(mfrow = c(3, 3), mar = c(4, 4, 1, 1))
+for (i in 1:9) trace_plot(mod_visit_honeybee, output_mod_visit_honeybee$variable[i], 3)
 par(mfrow = c(1, 1))
 
-ppcheck_visit_honeybee <- 
-  sapply(1:length(visit_span), FUN = 
-           function(x) {
-             
-             rgamma(1e3, post_visit_honeybee$mu[x]/post_visit_honeybee$sigma[x],
-                    1/post_visit_honeybee$sigma[x])
-             
-           })
+
+ppcheck_visit_honeybee <- mod_visit_honeybee$draws(variables = 'ppcheck', 
+                                                   format = 'matrix')
 
 plot(density(ppcheck_visit_honeybee[1, ]), ylim = c(0, 0.09), lwd = 0.1, 
      main = '', xlab = 'Honeybee time of floral visit (s)')
 for (i in 1:100) lines(density(ppcheck_visit_honeybee[i, ]), lwd = 0.1)
 lines(density(visit_span), col = 'red', lwd = 2)
-
 
 time_visit_honeybee <- as.vector(ppcheck_visit_honeybee)
 
