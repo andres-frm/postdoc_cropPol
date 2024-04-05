@@ -44,7 +44,7 @@ mod_diagnostics <- function(model, output) {
   par(mfrow = c(1, 3), mar = c(4, 4, 1, 1))
   diags %$% plot(rhat ~ x, pch = 16, col = 'tomato3', xlab = 'Parameters', 
                  ylab = 'Rhat')
-  abline(h = 1.1, lty = 3, col = 'red')
+  abline(h = 1.05, lty = 3, col = 'red')
   diags %$% plot(sort(ess_bulk) ~ x, pch = 16, col = 'cyan4', xlab = 'Parameters', 
                  ylab = 'ESS')
   diags %$% points(sort(ess_tail) ~ x, pch = 16, col = 'tan1')
