@@ -48,7 +48,7 @@ mod_diagnostics <- function(model, output) {
   diags %$% plot(sort(ess_bulk) ~ x, pch = 16, col = 'cyan4', xlab = 'Parameters', 
                  ylab = 'ESS')
   diags %$% points(sort(ess_tail) ~ x, pch = 16, col = 'tan1')
-  abline(h = 1000, lty = 3, col = 'red')
+  abline(h = 500, lty = 3, col = 'red')
   pareto %$% plot(pareto_k ~ x, pch = 16, col = 'purple', xlab = 'Observations', 
                   ylab = 'Pareto-k', ylim = c(-0.5, 1.2))
   abline(h = c(0.5, 0.7, 1), lty = 3, col = 'red')

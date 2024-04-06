@@ -1,5 +1,5 @@
 pks <- c('tidyverse', 'rethinking', 'rstan', 'magrittr', 'cmdstanr',
-         'ggdag', 'dagitty', 'readxl', 'brms', 'cowplot')
+         'ggdag', 'dagitty', 'readxl', 'brms', 'cowplot', 'parallel')
 
 sapply(pks, library, character.only = T)
 
@@ -135,7 +135,7 @@ lines(density(trip_span_LQ/60), main = '', col = 'cyan4',
       xlab = 'Trip span (min)', lwd = 2)
 
 plot(density(trips_bee_HQ), main = '', col = 'gold3',
-     xlab = 'Daily trip per bee (min)', lwd = 2, ylim = c(0, 1))
+     xlab = 'Daily trip per bee', lwd = 2, ylim = c(0, 1))
 lines(density(trips_bee_LQ), main = '', col = 'cyan4',
       xlab = 'Daily trip per bee (min)', lwd = 2)
 
@@ -179,7 +179,7 @@ cat(file = 'honeybee_visit.stan',
     
     model{
       vector[N] p;
-      mu ~ normal(7, 2);
+      mu ~ normal(5, 1.5);
       sigma ~ exponential(1);
       sigma1 ~ exponential(1);
       z_alpha ~ normal(0, 1);
@@ -443,19 +443,19 @@ cat(file = 'fruit_set.stan',
       vector[N] p;
       t ~ normal(0, 1);
     
-      to_vector(Z_year) ~ normal(0, 1);
+      to_vector(Z_year) ~ normal(0, 0.5);
       R_year ~ lkj_corr_cholesky(2);
       sigma_year ~ exponential(1);
     
-      to_vector(Z_locality) ~ normal(0, 1);
+      to_vector(Z_locality) ~ normal(0, 0.5);
       R_locality ~ lkj_corr_cholesky(2);
       sigma_locality ~ exponential(1);
     
-      to_vector(Z_farm) ~ normal(0, 1);
+      to_vector(Z_farm) ~ normal(0, 0.5);
       R_farm ~ lkj_corr_cholesky(2);
       sigma_farm ~ exponential(1);
     
-      to_vector(Z_plant) ~ normal(0, 1);
+      to_vector(Z_plant) ~ normal(0, 0.5);
       R_plant ~ lkj_corr_cholesky(2);
       sigma_plant ~ exponential(1);
       //branch ~ normal(0, 1);
@@ -513,7 +513,7 @@ mod_fs_exp <-
     chains = 3, 
     parallel_chains = 3, 
     iter_warmup = 500, 
-    iter_sampling = 10e3,
+    iter_sampling = 4e3,
     thin = 3,
     seed = 123,
     refresh = 200
@@ -523,12 +523,10 @@ output_mod_fruitset <- mod_fs_exp$summary()
 
 mod_diagnostics(mod_fs_exp, output_mod_fruitset)
 
-output_mod_fruitset |> filter(ess_tail < 1000)
-
 trace_plot(mod_fs_exp, output_mod_fruitset$variable[1], 3)
 
-par(mfrow = c(2, 4))
-for (i in 2:9) {
+par(mfrow = c(3, 3), mar = c(4, 4, 1, 1))
+for (i in 2:10) {
   trace_plot(mod_fs_exp, output_mod_fruitset$variable[i], 3)
 }
 par(mfrow = c(1, 1))
@@ -545,35 +543,9 @@ post_fruitset <-
        farm = post_fruitset[, grep('^farm', colnames(post_fruitset))], 
        plant = post_fruitset[, grep('^plant', colnames(post_fruitset))], 
        #branch = post_fruitset[, grep('^branch', colnames(post_fruitset))], 
-       year = post_fruitset[, grep('^year', colnames(post_fruitset))],
-       BH = post_fruitset[, grep('^BH', colnames(post_fruitset))])
+       year = post_fruitset[, grep('^year', colnames(post_fruitset))])
 
-ppcheck_fruit_set <- 
-  sapply(1:length(dat_fs$plant_id), FUN = 
-           function(x) {
-             
-             p <- with(dat_fs, 
-                       {
-                         t <- treatment[x]
-                         l <- locality_id[x]
-                         f <- farm_id[x]
-                         p <- plant_id[x]
-                         #b <- branch_id[x]
-                         y <- year_id[x]
-                         
-                         
-                         post_fruitset$treatment[, t, drop = T] +
-                           post_fruitset$locality[, l, drop = T] +
-                           post_fruitset$farm[, f, drop = T] +
-                           post_fruitset$plant[, p, drop = T] +
-                           #post_fruitset$branch[, b, drop = T] +
-                           post_fruitset$year[, y, drop = T] 
-                         
-                       })
-             
-             rbinom(1e3, dat_fs$flowers[x], inv_logit(p))
-             
-           })
+ppcheck_fruit_set <- mod_fs_exp$draws(variables = 'ppcheck', format = 'matrix')
 
 plot(density(ppcheck_fruit_set[1, ]), ylim = c(0, 0.025), lwd = 0.1, 
      main = '', xlab = 'Number of fruit')
@@ -600,51 +572,105 @@ mean(fruit_set)
 
 fruit_plant <- readRDS('fruit_plant.rds')
 
+fruit_plant$plant_id <- as.factor(paste(fruit_plant$farm, fruit_plant$plant, sep = '_'))
+
 fruit_plant$plot <- as.factor(paste(fruit_plant$farm, fruit_plant$plot, sep = '_'))
 
-fruit_plant <- fruit_plant[, c("farm", "plot", "total_fruts")]
+fruit_plant <- fruit_plant[, c("farm", "plot", 'plant_id', "total_fruts")]
 
 fruit_plant <- lapply(fruit_plant, function(x) if(is.factor(x)) as.numeric(x) else(x))
 
 fruit_plant$N <- length(fruit_plant$farm)
 fruit_plant$N_farm <- length(unique(fruit_plant$farm))
 fruit_plant$N_plot <- length(unique(fruit_plant$plot))
+fruit_plant$N_plant <- length(unique(fruit_plant$plant))
 fruit_plant$total_fruts <- round(fruit_plant$total_fruts)
 
 plot(density(rnbinom(1e3, size = 2, mu = exp(8))))
 
 cat(file = 'fruits_plant.stan', 
-    '
+    "
     data{
       int N;
       int N_farm;
       int N_plot;
+      int N_plant;
+      array[N] int plant_id;
       array[N] int total_fruts;
       array[N] int farm;
       array[N] int plot;
     }
     
     parameters{
+      vector[N_plant] z_plant;
+      real mu_plant;
+      real<lower = 0> sigma_plant;
+    
+      vector[N_farm] z_farm;
+      real mu_farm;
+      real<lower = 0> sigma_farm;
+    
+      vector[N_plot] z_plot;
+      real mu_plot;
+      real<lower = 0> sigma_plot;
+    
+      real<lower = 0> scale;
+    }
+    
+    transformed parameters{
+      vector[N_plant] theta;
       vector[N_farm] alpha;
       vector[N_plot] tau;
-      real<lower = 0> scale;
+      theta = mu_plant + z_plant * sigma_plant;
+      alpha = mu_farm + z_farm * sigma_farm;
+      tau = mu_plot + z_plot * sigma_plot;
+      
     }
     
     model{
       vector[N] mu;
-      alpha ~ normal(7, 2);
-      tau ~ normal(0, 0.5);
+    
+      mu_plant ~ normal(7, 2);
+      z_plant ~ normal(0, 1);
+      sigma_plant ~ exponential(1);
+    
+      mu_farm ~ normal(0, 1);
+      z_farm ~ normal(0, 1);
+      sigma_farm ~ exponential(1);
+      
+      mu_plot ~ normal(0, 1);
+      z_plot ~ normal(0, 1);
+      sigma_plot ~ exponential(1);
+    
       scale ~ exponential(1);
     
       for (i in 1:N) {
-        mu[i] = alpha[farm[i]] + tau[plot[i]];
+        mu[i] = theta[plant_id[i]] + alpha[farm[i]] + 
+                tau[plot[i]];
         mu[i] = exp(mu[i]);
       }
     
       total_fruts ~ neg_binomial_2(mu, scale);  
     }
-    ')
-
+    
+    generated quantities{
+      vector[N] log_lik;
+      vector[N] mu_1;
+      array[N] int ppcheck;
+    
+      for (i in 1:N) {
+        mu_1[i] = theta[plant_id[i]] + alpha[farm[i]] + 
+                tau[plot[i]];
+        mu_1[i] = exp(mu_1[i]);
+      }
+    
+      for (i in 1:N) log_lik[i] = neg_binomial_2_lpmf(total_fruts[i] | mu_1[i], scale);
+    
+      ppcheck = neg_binomial_2_rng(mu_1, scale);
+      
+    }
+    
+    ")
 
 file <- paste(getwd(), '/fruits_plant.stan', sep = '')
 
@@ -663,37 +689,24 @@ mod_fruit_plant <-
   )
 
 output_mod_tot_fru <- mod_fruit_plant$summary()
-output_mod_tot_fru |> print(n = 21)
+
+mod_diagnostics(mod_fruit_plant, output_mod_tot_fru)
 
 trace_plot(mod_fruit_plant, output_mod_tot_fru$variable[1], 3)
 
-par(mfrow = c(1, 3))
-for (i in 2:4) trace_plot(mod_fruit_plant, output_mod_tot_fru$variable[i], 3)
+par(mfrow = c(3, 3), mar = c(4, 4, 1, 1))
+for (i in 2:10) trace_plot(mod_fruit_plant, output_mod_tot_fru$variable[i], 3)
 par(mfrow = c(1, 1))
 
 post_tot_fruit <- mod_fruit_plant$draws(format = 'df')
 
 post_tot_fruit <- 
-  list(farm = post_tot_fruit[, grep('alpha', colnames(post_tot_fruit))], 
+  list(plant = post_tot_fruit[, grep('theta', colnames(post_tot_fruit))],
+       farm = post_tot_fruit[, grep('alpha', colnames(post_tot_fruit))], 
        plot = post_tot_fruit[, grep('tau', colnames(post_tot_fruit))], 
        scale = post_tot_fruit$scale)
 
-ppcheck_tot_fru <- 
-  sapply(1:length(fruit_plant$farm), FUN = 
-           function(x) {
-             
-             mu <- with(fruit_plant, 
-                        {
-                          f <- farm[x]
-                          p <- plot[x]
-                          
-                          post_tot_fruit$farm[, f, drop = T] +
-                            post_tot_fruit$plot[, p, drop = T]
-                        })
-             
-             rnbinom(1e3, size = post_tot_fruit$scale, mu = exp(mu))
-             
-           })
+ppcheck_tot_fru <- mod_fruit_plant$draws(variables = 'ppcheck', format = 'matrix')
 
 plot(density(ppcheck_tot_fru[1, ]), ylim = c(0, 0.00025), main = '', 
      xlab = 'Fruit produced per plant', lwd = 0.1)
@@ -990,43 +1003,53 @@ text(x = c(35, 35), y = c(0.11, 0.12), c('Low quality', 'Hight quality'),
 par(mfrow = c(1, 1))
 
 
-p <- vector('list', 50)
+cluster <- makeCluster(detectCores() - 1)
 
-names(p) <- paste('sim', 1:length(p), sep = '')
+clusterExport(cluster, c('simulated_visits', 'total_flowers', 
+                         'visits_day', 'hives_ha', 'p_01ha', 'visits_day_HQ'))
 
-for (i in seq_along(p)) {
+clusterEvalQ(cluster, {
+  pks <- c('tidyverse', 'rethinking', 'rstan', 'magrittr', 'cmdstanr',
+           'ggdag', 'dagitty', 'readxl', 'brms', 'cowplot', 'parallel')
   
-  p[[i]] <- simulated_visits(p_ha = p_01ha,
-                             flowers_plant = total_flowers, 
-                             visits_bee = visits_day, 
-                             bees_hive = hives_ha(20, seed = i+500), 
-                             hive_aggregate = T, 
-                             short = T)
-  p[[i]]$sim <- paste('sim', i, sep = '')
-  
-  print(paste('simulation', i, ' done'))
-}
+  sapply(pks, library, character.only = T)
+})
+
+t1 <- Sys.time()
+p <- parLapply(cluster, 1:100, fun = 
+                 function(i) {
+                   
+                   x <- simulated_visits(p_ha = p_01ha,
+                                         flowers_plant = total_flowers, 
+                                         visits_bee = visits_day, 
+                                         bees_hive = hives_ha(20, seed = i+500), 
+                                         hive_aggregate = T, 
+                                         short = T) 
+                   x$sim <- paste('sim', i, sep = '')
+                   x
+                 })
+Sys.time() - t1
 
 p <- do.call('rbind', p) 
 
+t1 <- Sys.time()
+p_HQ <- parLapply(cluster, 1:100, fun = 
+                 function(i) {
+                   
+                   x <- simulated_visits(p_ha = p_01ha,
+                                         flowers_plant = total_flowers, 
+                                         visits_bee = visits_day_HQ, 
+                                         bees_hive = hives_ha(20, mu_pop = 20e3,
+                                                              seed = i+500), 
+                                         hive_aggregate = T, 
+                                         short = T) 
+                   x$sim <- paste('sim', i, sep = '')
+                   x
+                 })
+Sys.time() - t1
 
-p_HQ <- vector('list', 50)
-
-names(p_HQ) <- paste('sim', 1:length(p_HQ), sep = '')
-
-for (i in seq_along(p_HQ)) {
-  
-  p_HQ[[i]] <- simulated_visits(p_ha = p_01ha,
-                             flowers_plant = total_flowers, 
-                             visits_bee = visits_day_HQ, 
-                             bees_hive = hives_ha(20, mu_pop = 20e3, 
-                                                  seed = i+500), 
-                             hive_aggregate = T, 
-                             short = T)
-  p_HQ[[i]]$sim <- paste('sim', i, sep = '')
-  
-  print(paste('simulation', i, 'done'))
-}
+stopCluster(cluster)
+rm(list = 'cluster')
 
 p_HQ <- do.call('rbind', p_HQ)
 
@@ -1060,28 +1083,61 @@ plot(density(rnbinom(1e4, size = 2, mu = 15)),
      main = expression(mu['honeybee pollen deposition'~'~'~'NegBinom(size = 2, mu = 15)']), 
      xlab = 'Single visit pollen deposition')
 
-dat_apis <- list(visits = apisSVP, 
-                 N = length(apisSVP))
+dat_apis <- list(pollen = apisSVP, 
+                 N = length(apisSVP), 
+                 ind_id = 1:length(apisSVP), 
+                 N_ind = length(apisSVP))
 
 cat(file = 'model_apis_SVP.stan', 
     '
     data{
       int N;
-      array[N] int visits;
+      int N_ind;
+      array[N] int pollen;
+      array[N] int ind_id;
     }
     
     parameters{
+      vector[N_ind] z_alpha;
       real mu;
+      real<lower = 0> sigma;
       real<lower = 0> phi;
     }
     
+    transformed parameters{
+      vector[N_ind] alpha;
+      alpha = mu + z_alpha * sigma;
+    }
+    
     model {
-      real lambda;
-      mu ~ normal(2.5, 0.5);
+      vector[N] lambda;
+      z_alpha ~ normal(0, 1);
+      mu ~ normal(3, 0.5);
+      sigma ~ exponential(1);
       phi ~ exponential(1);
       
-      lambda = exp(mu);
-      visits ~ neg_binomial_2(lambda, phi);
+      for (i in 1:N){
+        lambda[i] = alpha[ind_id[i]];
+        lambda[i] = exp(lambda[i]);
+      }
+      
+      pollen ~ neg_binomial_2(lambda, phi);
+    }
+    
+    generated quantities{
+      vector[N] log_lik;
+      array[N] int ppcheck;
+      vector[N] lambda1;
+    
+      for (i in 1:N){
+        lambda1[i] = alpha[ind_id[i]];
+        lambda1[i] = exp(lambda1[i]);
+      }
+    
+      for (i in 1:N) log_lik[i] = neg_binomial_2_lpmf(pollen[i] | lambda1[i], phi);
+    
+      ppcheck = neg_binomial_2_rng(lambda1, phi);
+      
     }
     ')
 
@@ -1092,7 +1148,7 @@ model_apis_svp <-
   fit_apis_svp$sample(
     data = dat_apis, 
     chains = 3, 
-    iter_sampling = 2e3, 
+    iter_sampling = 10e3, 
     iter_warmup = 500, 
     parallel_chains = 3, 
     thin = 3, 
@@ -1102,32 +1158,27 @@ model_apis_svp <-
 
 out_put_apis_svp <- model_apis_svp$summary()
 
+mod_diagnostics(model_apis_svp, out_put_apis_svp)
+
 model_apis_svp$summary()
 
-par(mfrow = c(1, 3))
-for (i in 1:3) trace_plot(model_apis_svp, out_put_apis_svp$variable[i], 3)
+par(mfrow = c(3, 3), mar = c(4, 4, 1, 1))
+for (i in 1:9) trace_plot(model_apis_svp, out_put_apis_svp$variable[i], 3)
 par(mfrow = c(1, 1))
 
 post_apis_svp <- model_apis_svp$draws(format = 'df')[-1]
 post_apis_svp$mu <- exp(post_apis_svp$mu)
 
-pp_check_svp <- 
-  sapply(1:500, FUN = 
-           function(x) {
-             
-             rnbinom(1e3, mu = post_apis_svp$mu[x], 
-                     size = post_apis_svp$phi[x])
-             
-           })
-
+pp_check_svp <- model_apis_svp$draws(variables = 'ppcheck', format = 'matrix')
+  
 plot(density(pp_check_svp[1, ]), lwd = 0.1, main = '', 
-     xlab = 'Single visit pollen deposition', ylim = c(0, 0.03))
+     xlab = 'Single visit pollen deposition', ylim = c(0, 0.05))
 for (i in 1:100) lines(density(pp_check_svp[i, ]), lwd = 0.1)
-lines(density(dat_apis$visits), col = 'red')
+lines(density(dat_apis$pollen), col = 'red', lwd = 3)
 
 set.seed(1234)
 sim_visits <- 
-  apply(pp_check_svp[c(sample(1:ncol(pp_check_svp), size = 50, replace = F)),], 1, 
+  apply(pp_check_svp[c(sample(1:nrow(pp_check_svp), size = 100, replace = F)),], 1, 
         simplify = 'list', FUN = 
           function(x) {
             
@@ -1135,10 +1186,11 @@ sim_visits <-
             
             for (j in 1:10) {
               
-              sum_vis <- vector("double", 2000)
-              for (i in 1:2000) {
-                sum_vis[[i]] <- sum(sample(x, size = j, T))
-              }
+              sum_vis <- 
+                sapply(1:2e3, FUN = 
+                         function(k) {
+                           sum(sample(x, size = j, T))
+                         })
               
               df_ <- tibble(poll_ac = sum_vis,
                             vis = j)
@@ -1154,7 +1206,6 @@ names(sim_visits) <- paste('sim', 1:length(sim_visits))
 for (i in seq_along(sim_visits)) {
   sim_visits[[i]]$sim <- rep(paste('sim', i), nrow(sim_visits[[i]]))
 }
-
 
 sim_visits <- do.call('rbind', sim_visits)
 
@@ -1202,6 +1253,22 @@ cat(file = 'slope_svp_apis.stan',
     
       poll_ac ~ neg_binomial_2(lambda, sigma);
     }
+    
+    generated quantities{
+      vector[N] lambda1;
+      array[N] int ppcheck;
+      vector[N] log_lik;
+     
+      for (i in 1:N) {
+        lambda1[i] = alpha + beta*vis[i];
+        lambda1[i] = exp(lambda1[i]);
+      }
+    
+      for (i in 1:N) log_lik[i] = neg_binomial_2_lpmf(poll_ac[i] | lambda1[i], sigma);
+    
+      ppcheck = neg_binomial_2_rng(lambda1, sigma);
+    }
+    
     ')
 
 file <- paste(getwd(), '/slope_svp_apis.stan', sep = '')
@@ -1221,9 +1288,10 @@ mod_svp_slope <-
   )
 
 output_mod_slope <- mod_svp_slope$summary()
-output_mod_slope
 
-post_svp_slope <- mod_svp_slope$draws(format = 'df')
+mod_diagnostics(mod_svp_slope, output_mod_slope)
+
+post_svp_slope <- mod_svp_slope$draws(variables = c('alpha', 'beta'), format = 'df')
 colnames(post_svp_slope)
 #for (i in 2:3) post_svp_slope[[i]] <- exp(post_svp_slope[[i]])
 
@@ -1245,11 +1313,13 @@ ppcheck_slope <-
                      mu = exp(lambda),
                      size = exp(post_svp_slope$alpha))
            })
+ppcheck_slope2 <- mod_svp_slope$draws(variables = 'ppcheck', format = 'matrix')
 
 plot(NULL, lwd = 0.1, main = '', 
      xlab = 'Single visit pollen deposition', 
      xlim = c(0, 600), ylim = c(0, 0.007))
 for (i in 1:50) lines(density(ppcheck_slope[i, ]), lwd = 0.1)
+for (i in 1:50) lines(density(ppcheck_slope2[i, ]), lwd = 0.1, col = 'lightblue3')
 lines(density(sim_visits$poll_ac), col = 'red')
 
 # here I have to fit the poisson model and then 
@@ -1263,7 +1333,7 @@ pollen_fruit <- pollen_fruit[, c("tratamiento", "fruto_diam",
 
 quantile(pollen_fruit$carga_poli)
 mu_asintota <- round(((370-187)/2) + 187)
-asymptote <- rnorm(2001, mu_asintota, 15)
+asymptote <- rnorm(length(post_svp_slope$beta), mu_asintota, 15)
 slope <- post_svp_slope$beta
 
 
@@ -1275,15 +1345,18 @@ for (i in 1:200) curve(asymptote[i]*(1-exp(-slope[i]*x)),
 curve(mean(asymptote)*(1-exp(-mean(slope)*x)), 
       add = T, lwd = 2, col = 'red')
 
-pollen_deposition_fun <- function(x, mu_est = T, n_posterior = 10) {
+pollen_deposition_fun <- function(x, 
+                                  mu_est = T, 
+                                  beta = slope, 
+                                  theta = asymptote) {
   if (mu_est) {
-    a <- mean(asymptote)
-    b <- mean(slope)
+    a <- mean(theta)
+    b <- mean(beta)
     
     return(round(a * (1-exp(-b*x))))
   } else {
-    a <- sample(asymptote, n_posterior, T)
-    b <- sample(slope, n_posterior, T)
+    a <- sample(theta, 1, T)
+    b <- sample(beta, 1, T)
     
     return(round(a * (1-exp(-b*x))))
   }
@@ -1292,13 +1365,13 @@ pollen_deposition_fun <- function(x, mu_est = T, n_posterior = 10) {
 pollen_deposition_LQ <- 
   lapply(vis_LQ, FUN = 
            function(x) {
-             lapply(x, pollen_deposition_fun)
+             lapply(x, pollen_deposition_fun, mu_est = F)
            })
 
 pollen_deposition_HQ <- 
   lapply(vis_HQ, FUN = 
            function(x) {
-             lapply(x, pollen_deposition_fun)
+             lapply(x, pollen_deposition_fun, mu_est = F)
            })
 
 
@@ -1366,6 +1439,9 @@ for (j in 1:100) {
 
 par(mfrow = c(1, 1))
 
+rm(list = c('pollen_deposition_HQ', 'pollen_deposition_LQ',
+            'vis_HQ', 'vis_LQ'))
+
 crop_pollination <- function(p_ha, # plants per ha
                              flowers_plant, # total flowers per plant
                              beta1 = 6, #flowering percentage (par 1 beta distribution) 
@@ -1375,6 +1451,7 @@ crop_pollination <- function(p_ha, # plants per ha
                              hive_aggregate = T, # if T same plants are visited by all hives 
                              # if F each hive has its own plants
                              # flowers
+                             short = F,
                              seed = 123) {
   
   message('Starting floral visits')
@@ -1395,77 +1472,137 @@ crop_pollination <- function(p_ha, # plants per ha
   PD <- 
     lapply(visits, FUN = 
              function(x) {
-               lapply(x, pollen_deposition_fun)
+               lapply(x, pollen_deposition_fun, mu_est = F)
              })
   
-  PD <- 
-    lapply(PD, FUN = 
-             function(x) {
-               
-               t <- unlist(lapply(x, mean), use.names = F)
-               
-               tibble(plant = paste('plant', 1:length(t), sep = ''), 
-                      pollen = t)
-               
-             })
-  
-  for (i in seq_along(PD)) {
-    PD[[i]]$n_hives <- paste(i)
+  if (short == F) {
+    
+    PD
+    
+  } else {
+    
+    PD <- 
+      lapply(PD, FUN = 
+               function(x) {
+                 
+                 t <- unlist(lapply(x, mean), use.names = F)
+                 
+                 tibble(plant = paste('plant', 1:length(t), sep = ''), 
+                        pollen = t)
+                 
+               })
+    
+    for (i in seq_along(PD)) {
+      PD[[i]]$n_hives <- paste(i)
+    }
+    
+    PD <- do.call('rbind', PD)
+    
+    PD <- 
+      PD |> 
+      group_by(n_hives) |> 
+      transmute(mu = median(pollen), 
+                li = quantile(pollen, 0.025),
+                ls = quantile(pollen, 0.975)) |> 
+      unique()
+    
+    message('Total execution time:')
+    print(Sys.time() - t1)
+    return(PD)
+    
   }
   
-  PD <- do.call('rbind', PD)
-  
-  PD <- 
-    PD |> 
-    group_by(n_hives) |> 
-    transmute(mu = median(pollen), 
-              li = quantile(pollen, 0.025),
-              ls = quantile(pollen, 0.975)) |> 
-    unique()
-  
-  message('Total execution time:')
-  print(Sys.time() - t1)
-  return(PD)
-  
 }
 
-pollen_LQ <- vector('list', 50)
+cluster <- makeCluster(detectCores() - 1)
 
-names(pollen_LQ) <- paste('sim', 1:length(pollen_LQ), sep = '')
+clusterExport(cluster, c('simulated_visits', 'pollen_deposition_fun', 
+                         'total_flowers', 'visits_day', 'hives_ha', 
+                         'p_01ha', 'visits_day_HQ'))
 
-for (i in seq_along(pollen_LQ)) {
+clusterEvalQ(cluster, {
+  pks <- c('tidyverse', 'rethinking', 'rstan', 'magrittr', 'cmdstanr',
+           'ggdag', 'dagitty', 'readxl', 'brms', 'cowplot', 'parallel')
   
-  pollen_LQ[[i]] <- crop_pollination(p_ha = p_01ha,
-                                     flowers_plant = total_flowers, 
-                                     visits_bee = visits_day, 
-                                     bees_hive = hives_ha(20, seed = i+500), 
-                                     hive_aggregate = T)
-  pollen_LQ[[i]]$sim <- paste('sim', i, sep = '')
-  
-  print(paste('simulation', i, 'done'))
-}
+  sapply(pks, library, character.only = T)
+})
+
+t <- Sys.time()
+pollen_LQ <- 
+  parLapply(cluster, 1:100, fun = 
+              function(i) {
+                
+                x <- crop_pollination(p_ha = p_01ha,
+                                      flowers_plant = total_flowers, 
+                                      visits_bee = visits_day, 
+                                      bees_hive = hives_ha(20, seed = i+500), 
+                                      hive_aggregate = T, 
+                                      short = T)
+                
+                x$sim <- paste('sim', i, sep = '')
+                x
+              })
+Sys.time() - t
 
 pollen_LQ <- do.call('rbind', pollen_LQ) 
 
-pollen_HQ <- vector('list', 50)
+# pollen_LQ <- vector('list', 50)
+# 
+# names(pollen_LQ) <- paste('sim', 1:length(pollen_LQ), sep = '')
+# 
+# for (i in seq_along(pollen_LQ)) {
+#   
+#   pollen_LQ[[i]] <- crop_pollination(p_ha = p_01ha,
+#                                      flowers_plant = total_flowers, 
+#                                      visits_bee = visits_day, 
+#                                      bees_hive = hives_ha(20, seed = i+500), 
+#                                      hive_aggregate = T)
+#   pollen_LQ[[i]]$sim <- paste('sim', i, sep = '')
+#   
+#   print(paste('simulation', i, 'done'))
+# }
+# 
+# pollen_LQ <- do.call('rbind', pollen_LQ) 
 
-names(pollen_HQ) <- paste('sim', 1:length(pollen_HQ), sep = '')
+t <- Sys.time()
+pollen_HQ <- 
+  parLapply(cluster, 1:100, fun = 
+              function(i) {
+                
+                x <- crop_pollination(p_ha = p_01ha,
+                                      flowers_plant = total_flowers, 
+                                      visits_bee = visits_day_HQ, 
+                                      bees_hive = hives_ha(20, mu_pop = 20e3, 
+                                                           seed = i+500), 
+                                      hive_aggregate = T, 
+                                      short = T)
+                x$sim <- paste('sim', i, sep = '')
+              })
+Sys.time() - t
 
-for (i in seq_along(pollen_HQ)) {
-  
-  pollen_HQ[[i]] <- crop_pollination(p_ha = p_01ha,
-                                     flowers_plant = total_flowers, 
-                                     visits_bee = visits_day_HQ, 
-                                     bees_hive = hives_ha(20, mu_pop = 20e3, 
-                                                          seed = i+500), 
-                                     hive_aggregate = T)
-  
-  pollen_HQ[[i]]$sim <- paste('sim', i, sep = '')
-  
-  print(paste('simulation', i, 'done'))
-}
+stopCluster(cluster)
+rm(list = 'cluster')
 
 pollen_HQ <- do.call('rbind', pollen_HQ)
+
+
+# names(pollen_HQ) <- paste('sim', 1:length(pollen_HQ), sep = '')
+# 
+# for (i in seq_along(pollen_HQ)) {
+#   
+#   pollen_HQ[[i]] <- crop_pollination(p_ha = p_01ha,
+#                                      flowers_plant = total_flowers, 
+#                                      visits_bee = visits_day_HQ, 
+#                                      bees_hive = hives_ha(20, mu_pop = 20e3, 
+#                                                           seed = i+500), 
+#                                      hive_aggregate = T)
+#   
+#   pollen_HQ[[i]]$sim <- paste('sim', i, sep = '')
+#   
+#   print(paste('simulation', i, 'done'))
+# }
+# 
+# pollen_HQ <- do.call('rbind', pollen_HQ)
 
 pollen_LQ$quality <- 'low'
 pollen_HQ$quality <- 'hight'
