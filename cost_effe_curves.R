@@ -1009,8 +1009,7 @@ clusterExport(cluster, c('simulated_visits', 'total_flowers',
                          'visits_day', 'hives_ha', 'p_01ha', 'visits_day_HQ'))
 
 clusterEvalQ(cluster, {
-  pks <- c('tidyverse', 'rethinking', 'rstan', 'magrittr', 'cmdstanr',
-           'ggdag', 'dagitty', 'readxl', 'brms', 'cowplot', 'parallel')
+  pks <- c('tidyverse', 'rethinking', 'magrittr', 'cmdstanr', 'parallel')
   
   sapply(pks, library, character.only = T)
 })
@@ -1018,7 +1017,7 @@ clusterEvalQ(cluster, {
 t1 <- Sys.time()
 p <- parLapply(cluster, 1:100, fun = 
                  function(i) {
-                   
+                   print(paste('Starting sim', i))
                    x <- simulated_visits(p_ha = p_01ha,
                                          flowers_plant = total_flowers, 
                                          visits_bee = visits_day, 
@@ -1066,7 +1065,7 @@ vis_hives |>
   geom_line(alpha = 0.7) + #geom_ribbon(alpha = 0.2) +
   labs(x = 'Hives per blueberry ha', 
        y = 'Average flower visits per flower\n at crop level') +
-  scale_shape_manual(values = rep(1, 50)) +
+  scale_shape_manual(values = rep(1, 100)) +
   scale_color_manual(values = c('lightblue3', 'tan1')) +
   theme_bw() +
   theme(legend.position = 'none', 
@@ -1287,17 +1286,17 @@ mod_svp_slope <-
     seed = 123
   )
 
-output_mod_slope <- mod_svp_slope$summary()
-
-mod_diagnostics(mod_svp_slope, output_mod_slope)
+# output_mod_slope <- mod_svp_slope$summary()
+# 
+# mod_diagnostics(mod_svp_slope, output_mod_slope)
 
 post_svp_slope <- mod_svp_slope$draws(variables = c('alpha', 'beta'), format = 'df')
 colnames(post_svp_slope)
 #for (i in 2:3) post_svp_slope[[i]] <- exp(post_svp_slope[[i]])
 
-par(mfrow = c(2, 2))
-for (i in 1:4) trace_plot(mod_svp_slope, output_mod_slope$variable[i], 3)
-par(mfrow = c(1, 1))
+# par(mfrow = c(2, 2))
+# for (i in 1:4) trace_plot(mod_svp_slope, output_mod_slope$variable[i], 3)
+# par(mfrow = c(1, 1))
 
 ppcheck_slope <- 
   sapply(1:length(sim_visits$vis), FUN = 
@@ -1317,26 +1316,205 @@ ppcheck_slope2 <- mod_svp_slope$draws(variables = 'ppcheck', format = 'matrix')
 
 plot(NULL, lwd = 0.1, main = '', 
      xlab = 'Single visit pollen deposition', 
-     xlim = c(0, 600), ylim = c(0, 0.007))
+     xlim = c(0, 600), ylim = c(0, 0.007), ylab = 'Density')
 for (i in 1:50) lines(density(ppcheck_slope[i, ]), lwd = 0.1)
 for (i in 1:50) lines(density(ppcheck_slope2[i, ]), lwd = 0.1, col = 'lightblue3')
 lines(density(sim_visits$poll_ac), col = 'red')
 
+rm(list = c('ppcheck_slope2'))
 # here I have to fit the poisson model and then 
 
 
 # ========= 6. Visit to pollen ========
 
 pollen_fruit <- readRDS('datos_experimento.rds')
-pollen_fruit <- pollen_fruit[, c("tratamiento", "fruto_diam", 
+pollen_fruit <- pollen_fruit[, c('planta', "tratamiento", "fruto_diam", 
                                  "carga_poli", "carga_poli2")]
+pollen_surpass <- read_xlsx('D:/github_repos/cap4_phd/all_data.xlsx', 
+                      sheet = 7, na = 'NA')[, -2]
 
-quantile(pollen_fruit$carga_poli)
-mu_asintota <- round(((370-187)/2) + 187)
+quantile(pollen_fruit[pollen_fruit$tratamiento == 'l', ]$carga_poli, 
+         probs = seq(0.1, 1, by = 0.1))
+
+dat_asymptote_pollen <- as_tibble(pollen_fruit[pollen_fruit$tratamiento == 'l', ])
+
+dat_asymptote_pollen$farm <- 'sta_lu'
+dat_asymptote_pollen$plant_id <- dat_asymptote_pollen %$% paste(farm, planta, sep = '')
+
+pollen_surpass$plant <- pollen_surpass %$% paste(farm, plant, sep = '')
+pollen_surpass$cultivar <- 'eme'
+
+dat_asymptote_pollen <- 
+  dat_asymptote_pollen |>
+  select(farm, plant_id, carga_poli) |> 
+  mutate(cultivar = 'sch')
+
+colnames(dat_asymptote_pollen) <- colnames(pollen_surpass)
+
+dat_asymptote_pollen <- rbind(dat_asymptote_pollen, 
+                              pollen_surpass[!is.na(pollen_surpass$no_polen),])
+
+levels(as.factor(dat_asymptote_pollen$cultivar))
+
+dat_asymptote_pollen <- 
+  lapply(dat_asymptote_pollen, function(x) if(!is.double(x)) as.integer(as.factor(x)) else(x))
+
+dat_asymptote_pollen$N <- length(dat_asymptote_pollen$farm)
+dat_asymptote_pollen$N_cultivar <- 2
+dat_asymptote_pollen$N_plant <- max(dat_asymptote_pollen$plant)
+dat_asymptote_pollen$N_farm <- max(dat_asymptote_pollen$farm)
+
+plot(density(rnbinom(1e3, size = 2, mu = exp(5))))
+cat(file = 'asymptote_pollen1.stan', 
+    '
+    data{
+      int N;
+      int N_cultivar;
+      int N_plant;
+      int N_farm;
+      array[N] int farm;
+      array[N] int plant;
+      array[N] int no_polen;
+      array[N] int cultivar;
+    }
+    
+    parameters{
+      vector[N_plant] z_alpha;
+      real mu_alpha;
+      real<lower = 0> sigma_alpha;
+    
+      vector[N_farm] z_theta;
+      real mu_theta;
+      real<lower = 0> sigma_theta;
+    
+      vector[N_cultivar] z_tau;
+      real mu_tau;
+      real<lower = 0> sigma_tau;
+    
+      real<lower = 0> scale;
+    }
+    
+    transformed parameters{
+      vector[N_plant] alpha;
+      vector[N_farm] theta;
+      vector[N_cultivar] tau;
+    
+      alpha = mu_alpha + z_alpha*sigma_alpha;
+      tau = mu_tau + z_tau * sigma_tau;
+      theta = mu_theta + z_theta * sigma_theta;
+    }
+    
+    model{
+      vector[N] mu;
+      z_alpha ~ normal(0, 1);
+      mu_alpha ~ normal(0, 1);
+      sigma_alpha ~ exponential(1);
+    
+      z_theta ~ normal(0, 1);
+      mu_theta ~ normal(0, 1);
+      sigma_theta ~ exponential(1);
+    
+      z_tau ~ normal(0, 1);
+      mu_tau ~ normal(5, 0.5);
+      sigma_tau ~ exponential(1);
+    
+      scale ~ exponential(1);
+    
+      for (i in 1:N){
+        mu[i] = tau[cultivar[i]] + theta[farm[i]] + alpha[plant[i]];
+        mu[i] = exp(mu[i]);
+      }
+    
+      no_polen ~ neg_binomial_2(mu, scale);
+    }
+    
+    generated quantities{
+      vector[N] log_lik;
+      vector[N] mu1;
+      array[N] int ppcheck;
+    
+      for (i in 1:N){
+        mu1[i] = tau[cultivar[i]] + theta[farm[i]] + alpha[plant[i]];
+        mu1[i] = exp(mu1[i]);
+      }
+    
+      for (i in 1:N) log_lik[i] = neg_binomial_2_lpmf(no_polen[i] | mu1[i], scale);
+      
+      ppcheck = neg_binomial_2_rng(mu1, scale);
+    }
+    ')
+
+
+file <- paste(getwd(), '/asymptote_pollen1.stan', sep = '')
+fit_asymtote_pollen <- cmdstan_model(file, compile = T)
+
+mod_asymptote_pollen <- 
+  fit_asymtote_pollen$sample(
+    data = dat_asymptote_pollen, 
+    chains = 3, 
+    parallel_chains = 3, 
+    iter_sampling = 4e3,
+    iter_warmup = 500, 
+    thin = 3, 
+    refresh = 500, 
+    seed = 123
+  )
+
+out_asymptote_pollen <- mod_asymptote_pollen$summary()
+
+mod_diagnostics(mod_asymptote_pollen, out_asymptote_pollen)
+
+ppcheck_asymptote_pol <- mod_asymptote_pollen$draws(variables = 
+                                                      'ppcheck', 
+                                                    format = 'matrix')
+
+plot(density(ppcheck_asymptote_pol[1, ]), ylab = 'Density', 
+     xlab = 'Pollen load', main = '', ylim = c(0, 0.009))
+for (i in 1:100) lines(density(ppcheck_asymptote_pol[i, ], lwd = 0.1))
+lines(density(dat_asymptote_pollen$no_polen), col = 'red', lwd = 2)
+
+post_asymptote <- 
+  mod_asymptote_pollen$draws(variables = 
+                               c('alpha', 'theta', 'tau', 'scale'), 
+                             format = 'df')
+
+post_asymptote <- 
+  list(plant = post_asymptote[, grepl('alpha', colnames(post_asymptote)), ], 
+       farm = post_asymptote[, grepl('theta', colnames(post_asymptote)), ], 
+       cultivar = post_asymptote[, grepl('tau', colnames(post_asymptote)), ],
+       scale = post_asymptote[, grepl('scale', colnames(post_asymptote)), ])
+
+
+
+sch <- with(post_asymptote, {
+                 cultivar[, 2, drop = T] +
+                   apply(plant, 1, mean) + 
+                   apply(farm, 1, mean)
+               })
+  
+sch <- replicate(100, 
+                 rnbinom(1000, size = post_asymptote$scale$scale, 
+                         mu = exp(sch)))
+
+eme <- with(post_asymptote, {
+                 cultivar[, 1, drop = T] +
+                 apply(plant, 1, mean) + 
+                 apply(farm, 1, mean)
+              })
+
+eme <- replicate(100, 
+                 rnbinom(1000, size = post_asymptote$scale$scale, 
+                         mu = exp(eme)))
+
+plot(NULL, xlim = c(0, 450), ylim = c(0, 1), 
+     xlab = 'Pollen load', ylab = 'eCDF')
+for (i in 1:100) lines(ecdf(sch[, i]), col = 'lightblue')
+for (i in 1:100) lines(ecdf(eme[, i]), col = 'tan')
+abline(v = c(225, 250, 275), lty = c(2, 3, 2), col = 'red') # 
+
+mu_asintota <- 250
 asymptote <- rnorm(length(post_svp_slope$beta), mu_asintota, 15)
 slope <- post_svp_slope$beta
-
-
 
 plot(NULL, xlim = c(0, 30), ylim = c(0, 320), xlab = 'Honeybee visits', 
      ylab = 'Single visit pollen deposition')
