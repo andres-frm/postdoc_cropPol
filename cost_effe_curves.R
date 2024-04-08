@@ -1696,7 +1696,8 @@ cluster <- makeCluster(detectCores() - 1)
 
 clusterExport(cluster, c('simulated_visits', 'pollen_deposition_fun', 
                          'total_flowers', 'visits_day', 'hives_ha', 
-                         'p_01ha', 'visits_day_HQ'))
+                         'p_01ha', 'visits_day_HQ', 'crop_pollination', 
+                         'asymptote', 'slope'))
 
 clusterEvalQ(cluster, {
   pks <- c('tidyverse', 'magrittr', 'cmdstanr',
@@ -1755,6 +1756,7 @@ pollen_HQ <-
                                       hive_aggregate = T, 
                                       short = T)
                 x$sim <- paste('sim', i, sep = '')
+                x
               })
 Sys.time() - t
 
@@ -1787,55 +1789,34 @@ pollen_HQ$quality <- 'hight'
 
 pollen_hives <- rbind(pollen_LQ, pollen_HQ)
 
-vis_hives |> 
+plot_vis_hive <- 
+  vis_hives |> 
   ggplot(aes(as.numeric(n_hives), mu, shape = sim,
              ymin = li, ymax = ls, color = quality)) +
   geom_line(alpha = 0.7) + #geom_ribbon(alpha = 0.2) +
   labs(x = 'Hives per blueberry ha', 
        y = 'Average flower visits per flower\n at crop level') +
-  scale_shape_manual(values = rep(1, 50)) +
+  scale_shape_manual(values = rep(1, 100)) +
   scale_color_manual(values = c('lightblue3', 'tan1')) +
   theme_bw() +
   theme(legend.position = 'none', 
         panel.grid = element_blank())
 
-pollen_hives |> 
+plot_pollen_hive <- 
+  pollen_hives |> 
   ggplot(aes(as.numeric(n_hives), mu, shape = sim,
              ymin = li, ymax = ls, color = quality)) +
   geom_line(alpha = 0.7) + #geom_ribbon(alpha = 0.2) +
   labs(x = 'Hives per blueberry ha', 
        y = 'Average pollen deposition per flower\n at crop level') +
-  scale_shape_manual(values = rep(1, 50)) +
+  scale_shape_manual(values = rep(1, 100)) +
   scale_color_manual(values = c('lightblue3', 'tan1')) +
   geom_hline(yintercept = c(112, 274), linetype = 2, color = 'red') +
   theme_bw() +
   theme(legend.position = 'none', 
         panel.grid = element_blank())
 
-plot_grid(vis_hives |> 
-            ggplot(aes(as.numeric(n_hives), mu, shape = sim,
-                       ymin = li, ymax = ls, color = quality)) +
-            geom_line(alpha = 0.5, linewidth = 0.3) + #geom_ribbon(alpha = 0.2) +
-            labs(x = 'Hives per blueberry ha', 
-                 y = 'Average flower visits per flower\n at crop level') +
-            scale_shape_manual(values = rep(1, 50)) +
-            scale_color_manual(values = c('lightblue3', 'tan1')) +
-            theme_bw() +
-            theme(legend.position = 'none', 
-                  panel.grid = element_blank()), 
-          pollen_hives |> 
-            ggplot(aes(as.numeric(n_hives), mu, shape = sim,
-                       ymin = li, ymax = ls, color = quality)) +
-            geom_line(alpha = 0.5, linewidth = 0.3) + #geom_ribbon(alpha = 0.2) +
-            labs(x = 'Hives per blueberry ha', 
-                 y = 'Average pollen deposition per flower\n at crop level') +
-            scale_shape_manual(values = rep(1, 50)) +
-            scale_color_manual(values = c('lightblue3', 'tan1')) +
-            geom_hline(yintercept = c(112, 274), linetype = 2, color = 'red') +
-            theme_bw() +
-            theme(legend.position = 'none', 
-                  panel.grid = element_blank()), 
-          ncol = 2)
+plot_grid(plot_vis_hive, plot_pollen_hive, ncol = 2)
 
 ggsave('simulation_visit_pollen.jpg', width = 16, height = 10, units = 'cm', dpi = 700)
 
