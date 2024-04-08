@@ -1699,8 +1699,8 @@ clusterExport(cluster, c('simulated_visits', 'pollen_deposition_fun',
                          'p_01ha', 'visits_day_HQ'))
 
 clusterEvalQ(cluster, {
-  pks <- c('tidyverse', 'rethinking', 'rstan', 'magrittr', 'cmdstanr',
-           'ggdag', 'dagitty', 'readxl', 'brms', 'cowplot', 'parallel')
+  pks <- c('tidyverse', 'magrittr', 'cmdstanr',
+           'ggdag', 'dagitty', 'parallel')
   
   sapply(pks, library, character.only = T)
 })
