@@ -1062,7 +1062,7 @@ unique(vis_hives$sim)
 vis_hives |> 
   ggplot(aes(as.numeric(n_hives), mu, shape = sim,
              ymin = li, ymax = ls, color = quality)) +
-  geom_line(alpha = 0.7) + #geom_ribbon(alpha = 0.2) +
+  geom_line(alpha = 0.3) + #geom_ribbon(alpha = 0.2) +
   labs(x = 'Hives per blueberry ha', 
        y = 'Average flower visits per flower\n at crop level') +
   scale_shape_manual(values = rep(1, 100)) +
@@ -1793,7 +1793,7 @@ plot_vis_hive <-
   vis_hives |> 
   ggplot(aes(as.numeric(n_hives), mu, shape = sim,
              ymin = li, ymax = ls, color = quality)) +
-  geom_line(alpha = 0.7) + #geom_ribbon(alpha = 0.2) +
+  geom_line(alpha = 1, linewidth = 0.15) + #geom_ribbon(alpha = 0.2) +
   labs(x = 'Hives per blueberry ha', 
        y = 'Average flower visits per flower\n at crop level') +
   scale_shape_manual(values = rep(1, 100)) +
@@ -1806,7 +1806,7 @@ plot_pollen_hive <-
   pollen_hives |> 
   ggplot(aes(as.numeric(n_hives), mu, shape = sim,
              ymin = li, ymax = ls, color = quality)) +
-  geom_line(alpha = 0.7) + #geom_ribbon(alpha = 0.2) +
+  geom_line(linewidth = 0.15) + #geom_ribbon(alpha = 0.2) +
   labs(x = 'Hives per blueberry ha', 
        y = 'Average pollen deposition per flower\n at crop level') +
   scale_shape_manual(values = rep(1, 100)) +
@@ -1821,6 +1821,482 @@ plot_grid(plot_vis_hive, plot_pollen_hive, ncol = 2)
 ggsave('simulation_visit_pollen.jpg', width = 16, height = 10, units = 'cm', dpi = 700)
 
 # ============= 7. Pollen to fruit =====
+
+# ===== Contrasts fruit size cultivars =====
+
+snow <- as_tibble(readRDS('datos_experimento.rds'))
+snow <- snow[, c("planta", "tratamiento", "carga_poli", "fruto_diam")]
+snow$farm <- 'sta_lu'
+snow <- snow[snow$tratamiento == 'l', ]
+snow$plant_id <- snow %$% paste(planta, tratamiento, sep = '')
+snow$variedad <- 'sch'
+snow1 <- snow[, c("farm", "plant_id", "variedad", "fruto_diam")]
+colnames(snow1) <- c('farm', 'plant_id', 'cultivar', 'fruit_diam')
+
+emerald <- readRDS('fruit_size.rds')
+emerald <- emerald[, c("year", "farm", "plant", 
+                       "fruit_diameter", "fruit_weight")]
+emerald$plant_id <- emerald %$% paste(plant, farm, sep = '')
+for (i in 1:2) emerald[[i]] <- as.factor(emerald[[i]])
+emerald$variedad <- 'eme'
+emerald1 <- emerald[, c('farm', "plant_id", "variedad", "fruit_diameter")]
+colnames(emerald1) <- colnames(snow1)
+
+pri_sj <- as_tibble(read.csv2('calidad_frutoPRI_SJ.csv', header = T, sep = ';'))
+pri_sj$plant_id <- pri_sj %$% paste(finca, planta, sep = '')
+pri_sj1 <- pri_sj[, c("finca", "plant_id", "variedad", "diamF")]
+colnames(pri_sj1) <- colnames(snow1)
+
+fruit_size_cultivars <- rbind(snow1, emerald1, pri_sj1)
+
+fruit_size_cultivars[] <- 
+  lapply(fruit_size_cultivars, function(x) if(!is.numeric(x)) as.factor(x) else(x))
+
+fruit_size_cultivars <- 
+  fruit_size_cultivars[fruit_size_cultivars$fruit_diam > 2, ]
+
+dat_fru_size <- 
+  lapply(fruit_size_cultivars[!is.na(fruit_size_cultivars$fruit_diam), ], 
+         function(x) if(!is.numeric(x)) as.integer(x) else(x))
+
+lapply(dat_fru_size, function(x) sum(is.na(x)))
+
+dat_fru_size$N <- length(dat_fru_size$farm)
+dat_fru_size$N_plants <- max(dat_fru_size$plant_id)
+dat_fru_size$N_cultivars <- max(dat_fru_size$cultivar)
+dat_fru_size$N_farms <- max(dat_fru_size$farm)
+
+cat(file = 'fruit_size_comp.stan', 
+    '
+    data{
+      int N;
+      int N_cultivars;
+      int N_plants;
+      int N_farms;
+      vector[N] fruit_diam;
+      array[N] int cultivar;
+      array[N] int plant_id;
+      array[N] int farm;
+    }
+    
+    parameters{
+      vector[N_cultivars] z_alpha;
+      real mu_alpha;
+      real<lower = 0> sigma_alpha;
+    
+      vector[N_plants] z_theta;
+      real mu_theta;
+      real<lower = 0> sigma_theta;
+    
+      vector[N_farms] z_tau;
+      real mu_tau;
+      real<lower = 0> sigma_tau;
+    
+      real<lower = 0> sigma;
+    }
+    
+    transformed parameters{
+      vector[N_cultivars] alpha;
+      vector[N_plants] theta;
+      vector[N_farms] tau;
+    
+      alpha = mu_alpha + z_alpha * sigma_alpha;
+      theta = mu_theta + z_theta * sigma_theta;
+      tau = mu_tau + z_tau * sigma_tau;
+    }
+    
+    model{
+      vector[N] mu;
+      sigma ~ exponential(1);
+    
+      z_alpha ~ normal(0, 1);
+      mu_alpha ~ normal(15, 2.5);
+      sigma_alpha ~ exponential(1);
+    
+      z_theta ~ normal(0, 1);
+      mu_theta ~ normal(0, 1);
+      sigma_theta ~ exponential(1);
+    
+      z_tau ~ normal(0, 1);
+      mu_tau ~ normal(0, 1);
+      sigma_tau ~ exponential(1);
+    
+      for (i in 1:N){
+        mu[i] = alpha[cultivar[i]] + theta[plant_id[i]] + tau[farm[i]];
+      }
+    
+      fruit_diam ~ normal(mu, sigma);
+    }
+    
+    generated quantities{
+      vector[N] log_lik;
+      vector[N] mu1;
+      array[N] real ppcheck;
+    
+      for (i in 1:N){
+        mu1[i] = alpha[cultivar[i]] + theta[plant_id[i]] + tau[farm[i]];
+      }
+    
+      for (i in 1:N) log_lik[i] = normal_lpdf(fruit_diam[i] | mu1[i], sigma);
+    
+      ppcheck = normal_rng(mu1, sigma);
+    }
+    ')
+
+file <- paste(getwd(), '/fruit_size_comp.stan', sep = '')
+fit_fruit_size <- cmdstan_model(file, compile = T)
+
+mod_fruit_size <- 
+  fit_fruit_size$sample(
+    data = dat_fru_size,
+    iter_sampling = 4e3,
+    iter_warmup = 500,
+    chains = 3,
+    parallel_chains = 3,
+    thin = 3,
+    refresh = 500,
+    seed = 123
+  )
+
+out_fruit_size <- mod_fruit_size$summary()
+
+mod_diagnostics(mod_fruit_size, out_fruit_size)
+
+ppcheck_fruit_size <- mod_fruit_size$draws('ppcheck', format = 'matrix')
+
+plot(density(ppcheck_fruit_size[1, ]), xlab = 'fruit size (mm)', 
+     ylab = 'Density', main = '', lwd = 0.1, ylim = c(0, 0.25))
+for (i in 1:500) lines(density(ppcheck_fruit_size[i, ]), lwd = 0.1)
+lines(density(dat_fru_size$fruit_diam), col = 'red', lwd = 1.5)
+
+post_fruit_size <- mod_fruit_size$draws(c('alpha', 'theta', 'tau', 'sigma'), 
+                                        format = 'df')
+
+post_fruit_size <- 
+  list(
+    cultivar = post_fruit_size[, grepl('alpha', colnames(post_fruit_size))],
+    plant = post_fruit_size[, grepl('theta', colnames(post_fruit_size))],
+    farm = post_fruit_size[, grepl('tau', colnames(post_fruit_size))],
+    sigma = post_fruit_size[, grepl('sigma', colnames(post_fruit_size))]
+  )
+
+levels(fruit_size_cultivars$cultivar)
+
+fruits_sim <- 
+  lapply(1:4, FUN = 
+           function(x) {
+             
+             cult <- levels(fruit_size_cultivars$cultivar)[x]
+             
+             mu <- 
+               with(post_fruit_size, 
+                    {
+                      cultivar[, x, drop = T] +
+                        apply(plant, 1, mean) +
+                        apply(farm, 1, mean)
+                    })
+             replicate(1e3, rnorm(1e3, mu, post_fruit_size$sigma$sigma))
+           })
+
+names(fruits_sim) <- levels(fruit_size_cultivars$cultivar)
+
+fruits_sim <- lapply(c(1, 2, 4), FUN = 
+                       function(x) {
+                         
+                         sapply(1:100, FUN = 
+                                  function(i) {
+                                    
+                                    fruits_sim[[x]][, i] - 
+                                      fruits_sim[[3]][, i]
+                                    
+                                  }, simplify = 'array')
+                       })
+
+names(fruits_sim) <- levels(fruit_size_cultivars$cultivar)[-3]
+
+par(mfrow = c(2, 2), mar = c(4.2, 4.2, 1, 1))
+
+for (i in 1:3) {
+  
+  plot(density(fruits_sim[[i]][, 1]), lwd = 0.1, 
+       xlab = paste('contrast sch - ', names(fruits_sim)[i]), 
+       main = '', col = i, ylim = c(0, 0.25))
+  
+  for (j in 1:100) lines(density(fruits_sim[[i]][, j]), col = i, lwd = 0.1)
+  
+}
+par(mfrow = c(1, 1))
+
+fruits_sim <- 
+  lapply(fruits_sim, FUN = 
+           function(x) apply(x, 2, mean))
+
+plot(NULL, lwd = 2, ylim = c(0, 8), xlim = c(-0.5, 2.2),
+     xlab = paste('contrast sch - cultivars'), 
+     main = '', ylab = 'Density')
+for (i in 1:3) lines(density(fruits_sim[[i]]), lwd = 2, col = i)
+
+# ======= pollen fruit function ======
+
+snow <- readRDS('datos_experimento.rds')
+
+colnames(snow)[10] <- 'fruit_sch'
+snow$fruit_eme <- snow$fruit_sch + sample(fruits_sim$eme, nrow(snow), T)
+snow$fruit_sj <- snow$fruit_sch + sample(fruits_sim$sj, nrow(snow), T)
+snow$fruit_pri <- snow$fruit_sch + sample(fruits_sim$pri, nrow(snow), T)
+
+snow <- 
+  as_tibble(snow[, c(6, grep('fruit', colnames(snow)))])
+
+par(mfrow = c(2, 2), mar = c(4.2, 4.2, 1, 1))
+for (i in 2:5) plot(snow$carga_poli, snow[, i, drop = T], ylab = 'Fruit size (mm)', 
+                    xlab = 'Pollen deposition', col = i, main = colnames(snow)[i])
+par(mfrow = c(1, 1))
+
+snow$carga_poli_z <- as.vector(scale(snow$carga_poli))
+
+dat_pollen_fun <- lapply(snow, function(x) x)
+dat_pollen_fun$N <- nrow(snow)
+dat_pollen_fun$carga_poli2 <- as.vector(scale(dat_pollen_fun$carga_poli^2))
+#for (i in 2:5) dat_pollen_fun[[i]] <- as.vector(scale(dat_pollen_fun[[i]]))
+
+cat(file = 'pollen_function.stan', 
+    '
+    data{
+      int N;
+      vector[N] carga_poli_z;
+      vector[N] carga_poli2;
+      vector[N] fruit_sch;
+      vector[N] fruit_eme;
+      vector[N] fruit_sj;
+      vector[N] fruit_pri;
+    }
+    
+    parameters{
+      real alpha_sch;
+      real alpha_eme;
+      real alpha_pri;
+      real alpha_sj;
+      real beta_sch;
+      real beta2_sch;
+      real beta_eme;
+      real beta2_eme;
+      real beta_pri;
+      real beta2_pri;
+      real beta_sj;
+      real beta2_sj;
+      real<lower = 0> sigma_sch;
+      real<lower = 0> sigma_eme;
+      real<lower = 0> sigma_sj;
+      real<lower = 0> sigma_pri;
+    }
+    
+    model{
+    
+      // model snowchaser
+      vector[N] mu_sch;
+      alpha_sch ~ normal(0, 1);
+      beta_sch ~ normal(0, 1);
+      beta2_sch ~ normal(0, 1);
+      sigma_sch ~ exponential(1);
+      
+      for (i in 1:N) { 
+        mu_sch[i] = alpha_sch + beta_sch*carga_poli_z[i] + beta2_sch*carga_poli2[i];
+      }
+    
+      fruit_sch ~ normal(mu_sch, sigma_sch);
+    
+      // model emerald
+      vector[N] mu_eme;
+      alpha_eme ~ normal(0, 1);
+      beta_eme ~ normal(0, 1);
+      beta2_eme ~ normal(0, 1);
+      sigma_eme ~ exponential(1);
+      
+      for (i in 1:N) {
+        mu_eme[i] = alpha_eme + beta_eme*carga_poli_z[i] + beta2_eme*carga_poli2[i];
+      }
+    
+      fruit_eme ~ normal(mu_eme, sigma_eme);
+    
+      // model primadonna
+      vector[N] mu_pri;
+      alpha_pri ~ normal(0, 1);
+      beta_pri ~ normal(0, 1);
+      beta2_pri ~ normal(0, 1);
+      sigma_pri ~ exponential(1);
+      
+      for (i in 1:N) {
+        mu_pri[i] = alpha_pri + beta_pri*carga_poli_z[i] + beta2_pri*carga_poli2[i];
+      }
+    
+      fruit_pri ~ normal(mu_pri, sigma_pri);
+    
+      // model san joaquin
+      vector[N] mu_sj;
+      alpha_sj ~ normal(0, 1);
+      beta_sj ~ normal(0, 1);
+      beta2_sj ~ normal(0, 1);
+      sigma_sj ~ exponential(1);
+      
+      for (i in 1:N) {
+        mu_sj[i] = alpha_sj + beta_sj*carga_poli_z[i] + beta2_sj*carga_poli2[i];
+      }
+    
+      fruit_sj ~ normal(mu_sj, sigma_sj);
+    }
+    
+    generated quantities{
+      array[N] real ppcheck_sch;
+      array[N] real ppcheck_eme;
+      array[N] real ppcheck_pri;
+      array[N] real ppcheck_sj;
+      vector[N] mu_eme1;
+      vector[N] mu_sch1;
+      vector[N] mu_sj1;
+      vector[N] mu_pri1;
+      
+      for (i in 1:N) {
+        mu_sj1[i] = alpha_sj + beta_sj*carga_poli_z[i] + beta2_sj*carga_poli2[i];
+      }
+      
+      for (i in 1:N) { 
+        mu_sch1[i] = alpha_sch + beta_sch*carga_poli_z[i] + beta2_sch*carga_poli2[i];
+      }
+    
+      for (i in 1:N) {
+        mu_eme1[i] = alpha_eme + beta_eme*carga_poli_z[i] + beta2_eme*carga_poli2[i];
+      }
+    
+      for (i in 1:N) {
+        mu_pri1[i] = alpha_pri + beta_pri*carga_poli_z[i] + beta2_pri*carga_poli2[i];
+      }
+    
+      ppcheck_sch = normal_rng(mu_sch1, sigma_sch);
+      ppcheck_sj = normal_rng(mu_sj1, sigma_sj);
+      ppcheck_eme = normal_rng(mu_eme1, sigma_eme);
+      ppcheck_pri = normal_rng(mu_pri1, sigma_pri);
+      
+    }
+    ')
+
+file <- paste(getwd(), '/pollen_function.stan', sep = '')
+fit_fun_pollen <- cmdstan_model(file, compile = T)
+
+mod_fun_pollen <- 
+  fit_fun_pollen$sample(
+    data = dat_pollen_fun, 
+    iter_sampling = 4e3,
+    iter_warmup = 500,
+    chains = 3,
+    parallel_chains = 3,
+    thin = 3,
+    refresh = 500,
+    seed = 123
+  )
+
+out_mod_fun <- mod_fun_pollen$summary() 
+out_mod_fun |> print(n = 593)
+
+par(mfrow = c(3, 3))
+for (i in 2:10) trace_plot(mod_fun_pollen, out_mod_fun$variable[i], 3)
+par(mfrow = c(1, 1))
+
+ppcheck_fun_poll <- mod_fun_pollen$draws(c('ppcheck_sch', 
+                                           'ppcheck_eme', 
+                                           'ppcheck_pri', 
+                                           'ppcheck_sj'), format = 'df')
+ppcheck_fun_poll <- 
+  list(sch = ppcheck_fun_poll[, grep('sch', colnames(ppcheck_fun_poll))],
+       eme = ppcheck_fun_poll[, grep('eme', colnames(ppcheck_fun_poll))],
+       sj = ppcheck_fun_poll[, grep('sj', colnames(ppcheck_fun_poll))],
+       pri = ppcheck_fun_poll[, grep('pri', colnames(ppcheck_fun_poll))])
+
+ppcheck_fun_poll <- lapply(ppcheck_fun_poll, as.matrix)
+
+names(dat_pollen_fun)
+
+par(mfrow = c(2, 2))
+
+for (i in 1:4) {
+  plot(density(ppcheck_fun_poll[[i]][1, ]), main = '',
+       xlab = paste('Fruit size', names(ppcheck_fun_poll)[i]), 
+       lwd = 0.1, ylim = c(0, 0.6))
+  for (j in 1:100) lines(density(ppcheck_fun_poll[[i]][j, ]), lwd = 0.1)
+  lines(density(dat_pollen_fun[[i+1]]), col = 'red', lwd = 1.5)
+}
+
+par(mfrow = c(1, 1))
+
+post_functions <- mod_fun_pollen$draws(out_mod_fun$variable[2:17], 
+                                       format = 'df')
+
+post_functions <- 
+  list(sch = post_functions[, grep('sch', colnames(post_functions))],
+       eme = post_functions[, grep('eme', colnames(post_functions))],
+       sj = post_functions[, grep('sj', colnames(post_functions))],
+       pri = post_functions[, grep('pri', colnames(post_functions))])
+
+z_x <- dat_pollen_fun %$% seq(min(carga_poli_z), max(carga_poli_z), 
+                              length.out = 100)
+z_x2 <- dat_pollen_fun %$% seq(min(carga_poli2), max(carga_poli2), 
+                               length.out = 100)
+
+post_functions$sch %$% plot(mean(alpha_sch) + 
+                              mean(beta_sch)*z_x + mean(beta2_sch)*z_x2^2 ~ z_x, 
+                            lwd = 0.1, type = 'l', xlim = c(-5, 5), 
+                            ylim = c(0, 20))
+for(i in 1:1000) 
+  post_functions$sch %$% 
+  lines(alpha_sch[i] + 
+          beta_sch[i]*z_x + beta2_sch[i]*z_x2^2 ~ z_x, 
+        lwd = 0.1, type = 'l')
+
+
+plot_functions <- 
+  lapply(post_functions, FUN = 
+           function(x) {
+             
+             a <- x[, grep('alpha', colnames(x)), drop = T]
+             b <- x[, grep('beta_', colnames(x)), drop = T]
+             b2 <- x[, grep('beta2', colnames(x)), drop = T]
+             s <- x[, grep('sigma', colnames(x)), drop = T]
+             
+             sim <- sapply(1:length(z_x), FUN = 
+                             function(i) {
+                               
+                               mu <- a + b*z_x[i] + b2*z_x2[i]^2
+                               rnorm(1e3, mu, s)
+                               
+                             }, simplify = 'array')
+             
+             sim <- apply(sim, 2, FUN = 
+                            function(j) {
+                              tibble(mu = mean(j), 
+                                     li = quantile(j, 0.025), 
+                                     ls = quantile(j, 0.975))
+                            }, simplify = 'list')
+             
+             sim <- do.call('rbind', sim)
+             
+             sim$x <- z_x
+             
+             as_tibble(sim)
+             
+           })
+
+for (i in seq_along(plot_functions)) 
+  plot_functions[[i]]$cultivar <- names(plot_functions)[i]
+
+plot_functions$sch$mu <- mean(snow$fruit_sch) + plot_functions$sch$mu * sd(snow$fruit_sch)
+
+do.call('rbind', plot_functions) |> 
+  ggplot(aes(x, mu, ymin = li, ymax = ls, color = cultivar, 
+             fill = cultivar)) +
+  geom_line() +
+  geom_ribbon(alpha = 0.1)
+
+# ======= Estimating pollen load ====
 
 fruit_size <- readRDS('fruit_size.rds')
 
