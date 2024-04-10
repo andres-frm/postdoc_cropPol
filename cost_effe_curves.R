@@ -2577,20 +2577,109 @@ predict_weight(7, mu_est = T)
 
 save.image('all_results.RData')
 
-temp <- crop_pollination(p_ha = p_01ha,
-                         flowers_plant = total_flowers, 
-                         visits_bee = visits_day, 
-                         bees_hive = hives_ha(1, seed = 500), 
-                         hive_aggregate = T, 
-                         short = F)
+crop_yield <- function(p_ha, # plants per ha
+                       flowers_plant, # total flowers per plant
+                       beta1 = 6, #flowering percentage (par 1 beta distribution) 
+                       beta2 = 4, #flowering percentage (par 2 beta distribution) 
+                       visits_bee, # visits per honeybee individual
+                       bees_hive, # number of hives and honeybees per hive
+                       hive_aggregate = T, # if T same plants are visited by all hives 
+                       # if F each hive has its own plants
+                       # flowers
+                       short = F,
+                       seed = 123, 
+                       fruit_diameter = F,
+                       average_diameter = T,
+                       average_weight = T) {
+  
+  message('Starting floral visits')
+  t1 <- Sys.time()
+  
+  pollen_deposition <- 
+    crop_pollination(p_ha,
+                     flowers_plant,
+                     beta1,
+                     beta2,
+                     visits_bee,
+                     bees_hive,
+                     hive_aggregate,
+                     short = F, 
+                     seed)
+  
+  if (fruit_diameter) {
+    fruit_size_plant <- 
+      lapply(pollen_deposition, FUN = 
+               function(colmena) {
+                 
+                 mu <- lapply(colmena, FUN = 
+                                function(planta) {
+                                  t <- predict_fruit_size(planta, 
+                                                          mean_est = average_diameter)
+                                  t2 <- predict_weight(t, mu_est = average_weight)
+                                  
+                                  tibble(mu_diameter = mean(t), 
+                                         mu_weight = mean(t2))
+                                })
+                 
+                 mu <- do.call('rbind', mu)
+                 mu$plant <- paste('plant', 1:length(colmena))
+                 mu
+                 
+               })
+    
+    return(fruit_size_plant)
+  } else {
+    
+    production_plant <- 
+      lapply(pollen_deposition, FUN = 
+               function(colmena) {
+                 
+                 mu <- lapply(colmena, FUN = 
+                                function(planta) {
+                                  t <- predict_fruit_size(planta, 
+                                                          mean_est = average_diameter)
+                                  
+                                  sum(predict_weight(t, 
+                                                     mu_est = average_weight))/1e3
+                                  
+                                })
+                 
+                 mu <- tibble(kg_plant = unlist(mu, use.names = F))
+                 mu$plant <- paste('plant', 1:length(colmena))
+                 mu
+               })
+    
+    production_ha <- 
+      lapply(production_plant, FUN = 
+               function(plants) {
+                 tibble(t = sum(plants)/1e3)
+               })
+    for (i in seq_along(production_ha)) production_ha[[i]]$hives <- i
+    
+    production_ha <- do.call('rbind', production_ha)
+    
+    output <- 
+      list(production_ha = production_ha, 
+           production_ha_plant = production_plant)
+    
+    return(output)
+  }
+}
+
 t <- Sys.time()
-temp2 <- lapply(1:length(temp$Hive1), FUN = 
-                  function(x) {
-                    message(paste('iter', x))
-                    d <- predict_fruit_size(temp$Hive1[[x]], mean_est = F)
-                    sum(predict_weight(d, mu_est = F))/1000
-                  })
+temp2 <- crop_yield(p_ha = p_01ha,
+                    flowers_plant = total_flowers, 
+                    visits_bee = visits_day, 
+                    bees_hive = hives_ha(1, seed = 500), 
+                    hive_aggregate = T, 
+                    short = F, 
+                    fruit_diameter = T,
+                    average_diameter = T, 
+                    average_weight = T)
 Sys.time() - t
+
+sum(temp2$Hive1$mu_diameter)
+sum(unlist(temp2))/1000
 
 sum(predict_weight(temp2, mu_est = F))/1000
 
