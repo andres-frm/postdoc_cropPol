@@ -2057,8 +2057,7 @@ snow$carga_poli_z <- as.vector(scale(snow$carga_poli))
 
 dat_pollen_fun <- lapply(snow, function(x) x)
 dat_pollen_fun$N <- nrow(snow)
-dat_pollen_fun$carga_poli2 <- as.vector(scale(dat_pollen_fun$carga_poli^2))
-#for (i in 2:5) dat_pollen_fun[[i]] <- as.vector(scale(dat_pollen_fun[[i]]))
+dat_pollen_fun$carga_poli2 <- dat_pollen_fun$carga_poli_z^2
 
 cat(file = 'pollen_function.stan', 
     '
@@ -2095,8 +2094,8 @@ cat(file = 'pollen_function.stan',
     
       // model snowchaser
       vector[N] mu_sch;
-      alpha_sch ~ normal(0, 1);
-      beta_sch ~ normal(0, 1);
+      alpha_sch ~ normal(10, 2);
+      beta_sch ~ lognormal(0, 1);
       beta2_sch ~ normal(0, 1);
       sigma_sch ~ exponential(1);
       
@@ -2108,8 +2107,8 @@ cat(file = 'pollen_function.stan',
     
       // model emerald
       vector[N] mu_eme;
-      alpha_eme ~ normal(0, 1);
-      beta_eme ~ normal(0, 1);
+      alpha_eme ~ normal(10, 2);
+      beta_eme ~ lognormal(0, 1);
       beta2_eme ~ normal(0, 1);
       sigma_eme ~ exponential(1);
       
@@ -2121,8 +2120,8 @@ cat(file = 'pollen_function.stan',
     
       // model primadonna
       vector[N] mu_pri;
-      alpha_pri ~ normal(0, 1);
-      beta_pri ~ normal(0, 1);
+      alpha_pri ~ normal(10, 2);
+      beta_pri ~ lognormal(0, 1);
       beta2_pri ~ normal(0, 1);
       sigma_pri ~ exponential(1);
       
@@ -2134,8 +2133,8 @@ cat(file = 'pollen_function.stan',
     
       // model san joaquin
       vector[N] mu_sj;
-      alpha_sj ~ normal(0, 1);
-      beta_sj ~ normal(0, 1);
+      alpha_sj ~ normal(10, 2);
+      beta_sj ~ lognormal(0, 1);
       beta2_sj ~ normal(0, 1);
       sigma_sj ~ exponential(1);
       
@@ -2196,7 +2195,6 @@ mod_fun_pollen <-
   )
 
 out_mod_fun <- mod_fun_pollen$summary() 
-out_mod_fun |> print(n = 593)
 
 par(mfrow = c(3, 3))
 for (i in 2:10) trace_plot(mod_fun_pollen, out_mod_fun$variable[i], 3)
@@ -2221,7 +2219,7 @@ par(mfrow = c(2, 2))
 for (i in 1:4) {
   plot(density(ppcheck_fun_poll[[i]][1, ]), main = '',
        xlab = paste('Fruit size', names(ppcheck_fun_poll)[i]), 
-       lwd = 0.1, ylim = c(0, 0.6))
+       lwd = 0.1, ylim = c(0, 0.2))
   for (j in 1:100) lines(density(ppcheck_fun_poll[[i]][j, ]), lwd = 0.1)
   lines(density(dat_pollen_fun[[i+1]]), col = 'red', lwd = 1.5)
 }
@@ -2238,20 +2236,29 @@ post_functions <-
        pri = post_functions[, grep('pri', colnames(post_functions))])
 
 z_x <- dat_pollen_fun %$% seq(min(carga_poli_z), max(carga_poli_z), 
-                              length.out = 100)
-z_x2 <- dat_pollen_fun %$% seq(min(carga_poli2), max(carga_poli2), 
-                               length.out = 100)
+                              length.out = 1e3)
 
-post_functions$sch %$% plot(mean(alpha_sch) + 
-                              mean(beta_sch)*z_x + mean(beta2_sch)*z_x2^2 ~ z_x, 
-                            lwd = 0.1, type = 'l', xlim = c(-5, 5), 
-                            ylim = c(0, 20))
-for(i in 1:1000) 
-  post_functions$sch %$% 
-  lines(alpha_sch[i] + 
-          beta_sch[i]*z_x + beta2_sch[i]*z_x2^2 ~ z_x, 
-        lwd = 0.1, type = 'l')
-
+par(mfrow = c(2, 2))
+for (i in 1:4) {
+  
+  plot(mean(post_functions[[i]][, 1, drop = T]) + 
+         mean(post_functions[[i]][, 2, drop = T])*z_x + 
+         mean(post_functions[[i]][, 3, drop = T])*z_x^2 ~ z_x, 
+       lwd = 0.1, type = 'l', xlim = c(-1.3, 2.5), 
+       ylim = c(0, 20), xlab = 'Pollen deposition (z-scores)', 
+       ylab = paste('Fruit diameter', names(post_functions)[i]), col = i)
+  
+  for (j in 1:1000) {
+    post_functions$sch %$% 
+      lines(post_functions[[i]][, 1, drop = T][j] + 
+              post_functions[[i]][, 2, drop = T][j]*z_x + 
+              post_functions[[i]][, 3, drop = T][j]*z_x^2 ~ z_x, 
+            lwd = 0.1, type = 'l', col = i)
+  }
+  
+  points(dat_pollen_fun$carga_poli_z, dat_pollen_fun[[i+1]], lwd = 2)
+  
+}
 
 plot_functions <- 
   lapply(post_functions, FUN = 
@@ -2262,24 +2269,33 @@ plot_functions <-
              b2 <- x[, grep('beta2', colnames(x)), drop = T]
              s <- x[, grep('sigma', colnames(x)), drop = T]
              
+             est <- sapply(1:length(z_x), FUN = 
+                             function(i) {
+                               
+                               mu <- a + b*z_x[i] + b2*z_x[i]^2
+                               mu
+                               
+                             }, simplify = 'array')
+             
              sim <- sapply(1:length(z_x), FUN = 
                              function(i) {
                                
-                               mu <- a + b*z_x[i] + b2*z_x2[i]^2
+                               mu <- a + b*z_x[i] + b2*z_x[i]^2
                                rnorm(1e3, mu, s)
                                
                              }, simplify = 'array')
              
              sim <- apply(sim, 2, FUN = 
                             function(j) {
-                              tibble(mu = mean(j), 
-                                     li = quantile(j, 0.025), 
+                              tibble(li = quantile(j, 0.025), 
                                      ls = quantile(j, 0.975))
                             }, simplify = 'list')
              
              sim <- do.call('rbind', sim)
              
+             sim$mu <- apply(est, 2, mean)
              sim$x <- z_x
+             
              
              as_tibble(sim)
              
@@ -2288,21 +2304,37 @@ plot_functions <-
 for (i in seq_along(plot_functions)) 
   plot_functions[[i]]$cultivar <- names(plot_functions)[i]
 
-plot_functions$sch$mu <- mean(snow$fruit_sch) + plot_functions$sch$mu * sd(snow$fruit_sch)
-
 do.call('rbind', plot_functions) |> 
-  ggplot(aes(x, mu, ymin = li, ymax = ls, color = cultivar, 
-             fill = cultivar)) +
-  geom_line() +
-  geom_ribbon(alpha = 0.1)
+  ggplot(aes(x, mu, ymin = li, ymax = ls)) +
+  geom_ribbon(aes(fill = cultivar), alpha = 0.25) +
+  geom_line(aes(color = cultivar)) +
+  labs(x = 'Stigmatic pollen load (z-scores)', 
+       y = 'Predicted fruit diameter (mm)') +
+  theme_bw() +
+  theme(panel.grid = element_blank())
 
-# ======= Estimating pollen load ====
+# ======= corr size ~ weight ====
 
 fruit_size <- readRDS('fruit_size.rds')
 
 fruit_size <- fruit_size[fruit_size$fruit_diameter >5, ]
 
 fruit_size <- na.omit(fruit_size[, -ncol(fruit_size)])
+
+fruit_size$plant_id <- fruit_size %$% paste(farm, plant, sep = '_')
+fruit_size$farm <- as.factor(fruit_size$farm)
+fruit_size$plant_id <- as.factor(fruit_size$plant_id)
+
+summary(fruit_size)
+
+dat_size_wiegth <- 
+  list()
+
+
+
+
+
+
 
 mod_fruit_size <- fruit_size %$% lm(fruit_weight ~ fruit_diameter)
 
