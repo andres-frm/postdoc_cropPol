@@ -2475,7 +2475,9 @@ mod_size_weight <-
   )
 
 
-out_mod_size_weight <- mod_size_weight$summary()
+out_mod_size_weight <- mod_size_weight$summary(variables = 
+                                                 c('alpha', 'theta', 'tau', 'beta', 
+                                                   'sigma'))
 
 mod_diagnostics(mod_size_weight, out_mod_size_weight)
 
@@ -2500,8 +2502,66 @@ post_size_weight <-
        sigma = post_size_weight[, grep('sigma', colnames(post_size_weight))])
 
 
+predict_weight <- 
+  function(x, mu_est = T, seed = 123) {
+    
+    zeros <- which(x == 0)
+    non_zeros <- which(x > 0)
+    
+    n <- length(non_zeros)
+    df <- lapply(post_size_weight, FUN = 
+                   function(i) {
+                     apply(i, 1, mean)
+                   })
+    
+    if (mu_est) {
+      df <- lapply(df, mean)
+      sigma <- df[[5]]
+      
+      mu <- df[[1]] + df[[2]] + df[[3]] + exp(df[[4]]*x[non_zeros])
+      out <- mu
+      
+      if (sum(out < 0) >= 1) {
+        n2 <- sum(out < 0)
+        set.seed(seed)
+        out[which(out < 0 )] <- rgamma(n2, 0.03/0.01, 1/0.01)
+      }
+      
+    } else {
+      set.seed(seed)
+      df <- lapply(df, sample, size = n, replace = T)
+      sigma <- df[[5]]
+      
+      mu <- df[[1]] + df[[2]] + df[[3]] + exp(df[[4]]*x[non_zeros])
+      
+      set.seed(seed)
+      out <- rnorm(n, mu, sigma)
+      if (sum(out < 0) >= 1) {
+        n2 <- sum(out < 0)
+        set.seed(seed)
+        out[which(out < 0 )] <- rgamma(n2, 0.03/0.01, 1/0.01)
+      }
+    }
+    
+    x[zeros] <- 0
+    x[non_zeros] <- out
+    return(x)
+  }
 
+xx <- sample(0:20, 1e3, T)
 
+par(mfrow = c(1, 2), mar = c(4.2, 4.2, 1, 1))
+plot(xx, predict_weight(xx, mu_est = F), 
+     xlab = 'Fruit diameter (mm)', 
+     ylab = 'Predicted weight (g)')
+plot(xx, predict_weight(xx, mu_est = T), 
+     xlab = 'Fruit diameter (mm)', 
+     ylab = 'Predicted weight (g)')
+par(mfrow = c(1, 1))
+
+dat_size_weight %$% plot(fruit_diameter, fruit_weight)
+lines(0:25, predict_weight(0:25, mu_est = T), col = 'red')
+predict_weight(7, mu_est = T)
 
 
 mod_fruit_size <- fruit_size %$% lm(fruit_weight ~ (fruit_diameter))
