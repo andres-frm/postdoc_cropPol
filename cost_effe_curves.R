@@ -2325,27 +2325,34 @@ predict_fruit_size <- function(x,
   b1 <- df[, 2, drop = T]
   b2 <- df[, 3, drop = T]
   sigma <- df[, 4, drop = T]
-  x <- as.vector(scale(x))
-  x2 <- x^2
+  zeros <- which(x == 0)
+  non_zeros <- which(x > 0)
+  x_temp <- x[non_zeros]
+  x_temp <- as.vector(scale(x_temp))
+  x_temp2 <- x_temp^2
+  n <- length(x_temp)
   
   if (mean_est) {
-    mu <- mean(a) + mean(b1)*x + mean(b2)*x2
+    mu <- mean(a) + mean(b1)*x_temp + mean(b2)*x_temp2
     sigma <- mean(sigma)
     
     set.seed(seed)
-    return(rnorm(length(x), mu, sigma))
+    out <- rnorm(n, mu, sigma)
     
   } else {
-    a <- sample(a, length(x), T)
-    b1 <- sample(b1, length(x), T)
-    b2 <- sample(b2, length(x), T)
-    sigma <- sample(sigma, length(x), T)
+    a <- sample(a, n, T)
+    b1 <- sample(b1, n, T)
+    b2 <- sample(b2, n, T)
+    sigma <- sample(sigma, n, T)
     
-    mu <- a + b1*x + b2*x2
+    mu <- a + b1*x_temp + b2*x_temp2
     
     set.seed(seed)
-    return(rnorm(length(x), mu, sigma))
+    out <- rnorm(n, mu, sigma)
   }
+  x[zeros] <- 0
+  x[non_zeros] <- out
+  return(x)
 }
 
 plot(0:500, predict_fruit_size(0:500, cultivar = 'sj', mean_est = F))
@@ -2550,13 +2557,15 @@ predict_weight <-
 
 xx <- sample(0:20, 1e3, T)
 
-par(mfrow = c(1, 2), mar = c(4.2, 4.2, 1, 1))
+par(mfrow = c(1, 2), mar = c(4.2, 4.2, 2.5, 1))
 plot(xx, predict_weight(xx, mu_est = F), 
      xlab = 'Fruit diameter (mm)', 
-     ylab = 'Predicted weight (g)')
+     ylab = 'Predicted weight (g)', 
+     main = expression('Incluring'~sigma~'parameter'))
 plot(xx, predict_weight(xx, mu_est = T), 
      xlab = 'Fruit diameter (mm)', 
-     ylab = 'Predicted weight (g)')
+     ylab = 'Predicted weight (g)', 
+     main = 'average estimate')
 par(mfrow = c(1, 1))
 
 dat_size_weight %$% plot(fruit_diameter, fruit_weight)
@@ -2564,39 +2573,32 @@ lines(0:25, predict_weight(0:25, mu_est = T), col = 'red')
 predict_weight(7, mu_est = T)
 
 
-mod_fruit_size <- fruit_size %$% lm(fruit_weight ~ (fruit_diameter))
+# ====== 8. Crop production =======
 
-summary(mod_fruit_size)
+save.image('all_results.RData')
 
-predict.lm(mod_fruit_size, newdata = list(fruit_diameter = 7))
+temp <- crop_pollination(p_ha = p_01ha,
+                         flowers_plant = total_flowers, 
+                         visits_bee = visits_day, 
+                         bees_hive = hives_ha(1, seed = 500), 
+                         hive_aggregate = T, 
+                         short = F)
+t <- Sys.time()
+temp2 <- lapply(1:length(temp$Hive1), FUN = 
+                  function(x) {
+                    message(paste('iter', x))
+                    d <- predict_fruit_size(temp$Hive1[[x]], mean_est = F)
+                    sum(predict_weight(d, mu_est = F))/1000
+                  })
+Sys.time() - t
 
-fruit_size %$% plot(fruit_weight ~ fruit_diameter)
-abline(mod_fruit_size)
+sum(predict_weight(temp2, mu_est = F))/1000
 
-mod_fruit_size <- 
-  ulam(
-    alist(
-      fruit_weight ~ dnorm(mu, sigma),
-      mu <- alpha + beta*fruit_diameter,
-      alpha ~ dnorm(0, 1), 
-      beta ~ dnorm(0.5, 0.2),
-      sigma ~ dexp(1)
-    ), data = 
-      list(
-        fruit_diameter = fruit_size$fruit_diameter, 
-        fruit_weight = fruit_size$fruit_weight
-      ), chains = 3, cores = 3, iter = 2e3, warmup = 500
-  )
+plot(density(unlist(lapply(temp$Hive1, function(x) mean(x == 0)))))
 
-precis(mod_fruit_size)
 
-production_function <- function(x) {
-  fruit_diameter <- (7.23 - (1.9e-4*x^2) + (0.076*x))+3 # arreglar esto!!!!!
-  return(-1.9 + 0.26*fruit_diameter) # arreglaaaaaaaaar
-  
-}
 
-production_function(200)
+
 
 
 pollen_deposition_LQ <- 
