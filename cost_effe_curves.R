@@ -2313,6 +2313,44 @@ do.call('rbind', plot_functions) |>
   theme_bw() +
   theme(panel.grid = element_blank())
 
+predict_fruit_size <- function(x, 
+                               cultivar = 'sch', 
+                               mean_est = TRUE,
+                               seed = 123) {
+  if (length(x) <= 1) {
+    stop(message('x length must be greater than 1'))
+  }
+  df <- post_functions[[grep(cultivar, names(post_functions))]]
+  a <- df[, 1, drop = T]
+  b1 <- df[, 2, drop = T]
+  b2 <- df[, 3, drop = T]
+  sigma <- df[, 4, drop = T]
+  x <- as.vector(scale(x))
+  x2 <- x^2
+  
+  if (mean_est) {
+    mu <- mean(a) + mean(b1)*x + mean(b2)*x2
+    sigma <- mean(sigma)
+    
+    set.seed(seed)
+    return(rnorm(length(x), mu, sigma))
+    
+  } else {
+    a <- sample(a, length(x), T)
+    b1 <- sample(b1, length(x), T)
+    b2 <- sample(b2, length(x), T)
+    sigma <- sample(sigma, length(x), T)
+    
+    mu <- a + b1*x + b2*x2
+    
+    set.seed(seed)
+    return(rnorm(length(x), mu, sigma))
+  }
+}
+
+plot(0:500, predict_fruit_size(0:500, cultivar = 'sj', mean_est = F))
+points(0:500, predict_fruit_size(0:500, cultivar = 'pri', mean_est = F), 
+       col = 2)
 # ======= corr size ~ weight ====
 
 fruit_size <- readRDS('fruit_size.rds')
@@ -2324,19 +2362,149 @@ fruit_size <- na.omit(fruit_size[, -ncol(fruit_size)])
 fruit_size$plant_id <- fruit_size %$% paste(farm, plant, sep = '_')
 fruit_size$farm <- as.factor(fruit_size$farm)
 fruit_size$plant_id <- as.factor(fruit_size$plant_id)
+fruit_size$year <- as.factor(fruit_size$year)
 
 summary(fruit_size)
 
-dat_size_wiegth <- 
-  list()
+dat_size_weight <- 
+  lapply(fruit_size[, c("year", "farm", "fruit_weight", 
+                        "fruit_diameter", "plant_id")], 
+         function(x) if(is.factor(x)) as.integer(x) else(x))
+
+dat_size_weight$N <- length(dat_size_weight$year)
+dat_size_weight$N_year <- max(dat_size_weight$year)
+dat_size_weight$N_farm <- max(dat_size_weight$farm)
+dat_size_weight$N_plant <- max(dat_size_weight$plant_id)
+
+cat(file = 'diameter_weight.stan', 
+    '
+    data{
+      int N;
+      int N_year;
+      int N_farm;
+      int N_plant;
+      array[N] int year;
+      array[N] int farm;
+      array[N] int plant_id;
+      vector[N] fruit_weight;
+      vector[N] fruit_diameter;
+    }
+    
+    parameters{
+      vector[N_plant] z_alpha;
+      real mu_alpha;
+      real<lower = 0> sigma_alpha;
+    
+      vector[N_farm] z_theta;
+      real mu_theta;
+      real<lower = 0> sigma_theta;
+    
+      vector[N_year] z_tau;
+      real mu_tau;
+      real<lower = 0> sigma_tau;
+    
+      real beta;
+      real<lower = 0> sigma;
+    }
+    
+    transformed parameters{
+      vector[N_plant] alpha;
+      vector[N_farm] theta;
+      vector[N_year] tau;
+      
+      alpha = mu_alpha + z_alpha * sigma_alpha;
+      theta = mu_theta + z_theta * sigma_theta;
+      tau = mu_tau + z_tau * sigma_tau;
+    }
+    
+    model{
+      vector[N] mu;
+      beta ~ lognormal(0, 1);
+      sigma ~ exponential(1);
+      
+      z_alpha ~ normal(0, 1);
+      mu_alpha ~ normal(1.5, 0.25);
+      sigma_alpha ~ exponential(1);
+    
+      z_theta ~ normal(0, 1);
+      mu_theta ~ normal(0, 1);
+      sigma_theta ~ exponential(1);
+    
+      z_tau ~ normal(0, 1);
+      mu_tau ~ normal(0, 1);
+      sigma_tau ~ exponential(1);
+    
+      for (i in 1:N) {
+        mu[i] = alpha[plant_id[i]] + theta[farm[i]] +
+                tau[year[i]] + exp(beta*fruit_diameter[i]);
+      }
+    
+      fruit_weight ~ normal(mu, sigma);
+    }
+    
+    generated quantities{
+      vector[N] log_lik;
+      vector[N] mu1;
+      array[N] real ppcheck;
+    
+      for (i in 1:N) {
+        mu1[i] = alpha[plant_id[i]] + theta[farm[i]] +
+                 tau[year[i]] + exp(beta*fruit_diameter[i]);
+      }
+    
+      for (i in 1:N) log_lik[i] = normal_lpdf(fruit_weight[i] | mu1[i], sigma);
+      
+      ppcheck = normal_rng(mu1, sigma);
+    }
+    ')
+
+file <- paste(getwd(), '/diameter_weight.stan', sep = '')
+
+fit_size_weight <- cmdstan_model(file, compile = T)
+
+mod_size_weight <- 
+  fit_size_weight$sample(
+    data = dat_size_weight, 
+    iter_sampling = 4e3,
+    iter_warmup = 500,
+    chains = 3,
+    parallel_chains = 3,
+    thin = 3, 
+    refresh = 500,
+    seed = 123
+  )
+
+
+out_mod_size_weight <- mod_size_weight$summary()
+
+mod_diagnostics(mod_size_weight, out_mod_size_weight)
+
+ppcheck_size_weight <- mod_size_weight$draws('ppcheck', format = 'matrix')
+
+plot(density(ppcheck_size_weight[1, ]), lwd = 0.1, 
+     xlab = 'Fruit weight (g)', main = '',  ylim = c(0, 1))
+for (i in 1:500) lines(density(ppcheck_size_weight[i, ]), 
+                       lwd = 0.1)
+lines(density(dat_size_weight$fruit_weight), 
+      col = 'red', lwd = 2)
+
+post_size_weight <- mod_size_weight$draws(c('alpha', 'theta', 'tau', 'beta', 
+                                            'sigma'),
+                                          format = 'df')
+
+post_size_weight <- 
+  list(plant = post_size_weight[, grep('alpha', colnames(post_size_weight))],
+       farm = post_size_weight[, grep('theta', colnames(post_size_weight))],
+       year = post_size_weight[, grep('tau', colnames(post_size_weight))],
+       beta = post_size_weight[, grep('beta', colnames(post_size_weight))],
+       sigma = post_size_weight[, grep('sigma', colnames(post_size_weight))])
 
 
 
 
 
 
-
-mod_fruit_size <- fruit_size %$% lm(fruit_weight ~ fruit_diameter)
+mod_fruit_size <- fruit_size %$% lm(fruit_weight ~ (fruit_diameter))
 
 summary(mod_fruit_size)
 
