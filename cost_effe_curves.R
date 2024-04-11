@@ -2653,7 +2653,8 @@ clusterExport(cluster, c('simulated_visits', 'pollen_deposition_fun',
                          'total_flowers', 'visits_day', 'hives_ha', 
                          'p_01ha', 'visits_day_HQ', 'crop_pollination', 
                          'asymptote', 'slope', 'crop_yield', 
-                         'predict_fruit_size', 'predict_weight'))
+                         'predict_fruit_size', 'predict_weight',
+                         'post_functions', 'post_size_weight'))
 
 clusterEvalQ(cluster, {
   pks <- c('tidyverse', 'magrittr', 'cmdstanr',
@@ -2670,7 +2671,7 @@ t_ha_LQ <- parLapply(cluster, 1:100, fun =
                          l <- crop_yield(p_ha = p_01ha,
                                          flowers_plant = total_flowers, 
                                          visits_bee = visits_day, 
-                                         bees_hive = hives_ha(i, 
+                                         bees_hive = hives_ha(20, 
                                                               mu_pop = 1e4,
                                                               seed = 500+i), 
                                          hive_aggregate = T,
@@ -2695,7 +2696,7 @@ t_ha_HQ <- parLapply(cluster, 1:100, fun =
                          l <- crop_yield(p_ha = p_01ha,
                                          flowers_plant = total_flowers, 
                                          visits_bee = visits_day_HQ, 
-                                         bees_hive = hives_ha(i, 
+                                         bees_hive = hives_ha(20, 
                                                               mu_pop = 2e4,
                                                               seed = 500+i), 
                                          hive_aggregate = T,
