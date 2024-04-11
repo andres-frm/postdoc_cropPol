@@ -2355,6 +2355,7 @@ predict_fruit_size <- function(x,
   return(x)
 }
 
+par(mfrow = c(1, 1))
 plot(0:500, predict_fruit_size(0:500, cultivar = 'sj', mean_est = F))
 points(0:500, predict_fruit_size(0:500, cultivar = 'pri', mean_est = F), 
        col = 2)
@@ -2575,77 +2576,6 @@ predict_weight(7, mu_est = T)
 
 # ====== 8. Crop production =======
 
-save.image('all_results.RData')
-
-crop_yield <- function(p_ha, # plants per ha
-                       flowers_plant, # total flowers per plant
-                       beta1 = 6, #flowering percentage (par 1 beta distribution) 
-                       beta2 = 4, #flowering percentage (par 2 beta distribution) 
-                       visits_bee, # visits per honeybee individual
-                       bees_hive, # number of hives and honeybees per hive
-                       hive_aggregate = T, # if T same plants are visited by all hives 
-                       # if F each hive has its own plants
-                       # flowers
-                       seed = 123, 
-                       average_diameter = T,
-                       average_weight = T) {
-  
-  message('Starting floral visits')
-  t1 <- Sys.time()
-  
-  pollen_deposition <- 
-    crop_pollination(p_ha,
-                     flowers_plant,
-                     beta1,
-                     beta2,
-                     visits_bee,
-                     bees_hive,
-                     hive_aggregate,
-                     short = F, 
-                     seed)
-  
-  message('Starting production simulation (t per ha)')
-  
-  production_plant <-
-    lapply(pollen_deposition, FUN =
-             function(colmena) {
-
-               mu <- lapply(colmena, FUN =
-                              function(planta) {
-                                t <- predict_fruit_size(planta,
-                                                        mean_est = average_diameter)
-                                t1 <- predict_weight(t, mu_est = average_weight)
-
-                                tibble(kg_plant = sum(t1)/1e3,
-                                       mu_fruit_size = mean(t),
-                                       sd_fruit_size = sd(t),
-                                       mu_fruit_weight = mean(t1),
-                                       sd_fruit_weight = sd(t1))
-                              })
-
-               mu <- do.call('rbind', mu)
-               mu$plant <- paste('plant', 1:length(colmena))
-               mu
-             })
-
-  for (i in seq_along(production_plant)) production_plant[[i]]$hives <- i
-
-  production_ha <-
-    lapply(production_plant, FUN =
-             function(ha) {
-               tibble(t = sum(ha$kg_plant)/1e3)
-             })
-  for (i in seq_along(production_ha)) production_ha[[i]]$hives <- i
-
-  production_ha <- do.call('rbind', production_ha)
-
-  output <-
-    list(production_ha = production_ha,
-         production_ha_plant = production_plant)
-
-  return(output)
-}
-
 crop_yield <- function(p_ha, # plants per ha
                        flowers_plant, # total flowers per plant
                        beta1 = 6, #flowering percentage (par 1 beta distribution) 
@@ -2673,92 +2603,49 @@ crop_yield <- function(p_ha, # plants per ha
                      hive_aggregate,
                      short = F, 
                      seed)
-  pollen_deposition
-  # if (fruit_diameter) {
-  #   fruit_size_plant <- 
-  #     lapply(pollen_deposition, FUN = 
-  #              function(colmena) {
-  #                
-  #                mu <- lapply(colmena, FUN = 
-  #                               function(planta) {
-  #                                 t <- predict_fruit_size(planta, 
-  #                                                         mean_est = average_diameter)
-  #                                 t2 <- predict_weight(t, mu_est = average_weight)
-  #                                 
-  #                                 tibble(mu_diameter = mean(t), 
-  #                                        mu_weight = mean(t2))
-  #                               })
-  #                
-  #                mu <- do.call('rbind', mu)
-  #                mu$plant <- paste('plant', 1:length(colmena))
-  #                mu
-  #                
-  #              })
-  #   
-  #   return(fruit_size_plant)
-  # } else {
-  #   
-  #   message('Starting production simulation (t per ha)')
-  #   pollen_deposition
-  #   production_plant <-
-  #     lapply(pollen_deposition, FUN =
-  #              function(colmena) {
-  #                
-  #                mu <- lapply(colmena, FUN =
-  #                               function(planta) {
-  #                                 t <- predict_fruit_size(planta,
-  #                                                         mean_est = average_diameter)
-  #                                 t1 <- predict_weight(t, mu_est = average_weight)
-  #                                 
-  #                                 tibble(kg_plant = sum(t1)/1e3,
-  #                                        mu_fruit_size = mean(t),
-  #                                        sd_fruit_size = sd(t),
-  #                                        mu_fruit_weight = mean(t1),
-  #                                        sd_fruit_weight = sd(t1))
-  #                               })
-  #                
-  #                mu <- do.call('rbind', mu)
-  #                mu$plant <- paste('plant', 1:length(colmena))
-  #                mu
-  #              })
-  #   
-  #   for (i in seq_along(production_plant)) production_plant[[i]]$hives <- i
-  #   
-  #   production_ha <-
-  #     lapply(production_plant, FUN =
-  #              function(ha) {
-  #                tibble(t = sum(ha$kg_plant)/1e3)
-  #              })
-  #   for (i in seq_along(production_ha)) production_ha[[i]]$hives <- i
-  #   
-  #   production_ha <- do.call('rbind', production_ha)
-  #   
-  #   output <-
-  #     list(production_ha = production_ha,
-  #          production_ha_plant = production_plant)
-  #   
-  #   return(output)
-  # }
+  
+  message('Starting production simulation (t per ha)')
+  
+  production_plant <-
+    lapply(pollen_deposition, FUN =
+             function(colmena) {
+               
+               mu <- lapply(colmena, FUN =
+                              function(planta) {
+                                t <- predict_fruit_size(planta,
+                                                        mean_est = average_diameter)
+                                t1 <- predict_weight(t, mu_est = average_weight)
+                                
+                                tibble(kg_plant = sum(t1)/1e3,
+                                       mu_fruit_size = mean(t),
+                                       sd_fruit_size = sd(t),
+                                       mu_fruit_weight = mean(t1),
+                                       sd_fruit_weight = sd(t1))
+                              })
+               
+               mu <- do.call('rbind', mu)
+               mu$plant <- paste('plant', 1:length(colmena))
+               mu
+             })
+  
+  for (i in seq_along(production_plant)) production_plant[[i]]$hives <- i
+  
+  production_ha <-
+    lapply(production_plant, FUN =
+             function(ha) {
+               tibble(t = sum(ha$kg_plant)/1e3)
+             })
+  for (i in seq_along(production_ha)) production_ha[[i]]$hives <- i
+  
+  production_ha <- do.call('rbind', production_ha)
+  
+  output <-
+    list(production_ha = production_ha,
+         production_ha_plant = production_plant)
+  
+  return(output)
 }
 
-
-temp2 <- crop_yield(p_ha = 50,
-                    flowers_plant = total_flowers, 
-                    visits_bee = visits_day, 
-                    bees_hive = hives_ha(1, 
-                                         seed = 500), 
-                    hive_aggregate = T,
-                    average_diameter = F, 
-                    average_weight = F)
-temp2$Hive1[1]
-
-temp <- crop_pollination(p_ha = 50,
-                          flowers_plant = total_flowers, 
-                          visits_bee = visits_day, 
-                          bees_hive = hives_ha(1, seed = 500), 
-                          hive_aggregate = T, 
-                          short = F)
-temp$Hive1[1]
 
 cluster <- makeCluster(detectCores() - 1)
 
@@ -2791,9 +2678,11 @@ t_ha_LQ <- parLapply(cluster, 1:100, fun =
                                          average_weight = F)
                          
                          l$production_ha$sim <- paste('sim', i, sep = '')
-                         temp2$production_ha_plant
-                      
-                    })
+                         l$production_ha_plant <- 
+                           do.call('rbind', l$production_ha_plant)
+                         l$production_ha_plant <- paste('sim', i, sep = '')
+                         l
+                       })
 
 Sys.time() - t
 
@@ -2815,12 +2704,61 @@ t_ha_HQ <- parLapply(cluster, 1:100, fun =
                          
                          l$production_ha$sim <- paste('sim', i, sep = '')
                          temp2$production_ha_plant
-                         
+                         l$production_ha$sim <- paste('sim', i, sep = '')
+                         l$production_ha_plant <- 
+                           do.call('rbind', l$production_ha_plant)
+                         l$production_ha_plant <- paste('sim', i, sep = '')
+                         l
                        })
 
 Sys.time() - t
 
 save.image('all_results.RData')
+
+
+
+
+
+temp2$production_ha
+
+
+
+
+
+
+
+
+t <- Sys.time()
+temp2 <- crop_yield(p_ha = p_01ha,
+                    flowers_plant = total_flowers, 
+                    visits_bee = visits_day, 
+                    bees_hive = hives_ha(3, 
+                                         seed = 500), 
+                    hive_aggregate = T,
+                    average_diameter = F, 
+                    average_weight = F)
+Sys.time() - t
+
+temp2$production_ha
+temp2$production_ha_plant
+
+temp <- crop_pollination(p_ha = p_01ha,
+                          flowers_plant = total_flowers, 
+                          visits_bee = visits_day, 
+                          bees_hive = hives_ha(1, seed = 500), 
+                          hive_aggregate = T, 
+                          short = F)
+temp$Hive1[1]
+
+temp1 <- simulated_visits(p_ha = p_01ha,
+                          flowers_plant = total_flowers, 
+                          visits_bee = visits_day, 
+                          bees_hive = hives_ha(1, seed = 500), 
+                          hive_aggregate = T, 
+                          short = F)
+temp1$Hive1[1]
+
+
 
 
 
