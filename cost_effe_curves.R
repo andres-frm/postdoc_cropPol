@@ -2731,7 +2731,7 @@ crop_yield <- function(p_ha, # plants per ha
 
 
 t <- Sys.time()
-t_ha_LQ <- lapply(1:100, fun = 
+t_ha_LQ <- lapply(1:50, fun = 
                     function(i) {
                       
                       l <- crop_yield(p_ha = p_01ha,
@@ -2756,7 +2756,7 @@ Sys.time() - t
 save.image('all_results.RData')
 
 t <- Sys.time()
-t_ha_HQ <- lapply(1:100, fun = 
+t_ha_HQ <- lapply(1:50, fun = 
                     function(i) {
                       
                       l <- crop_yield(p_ha = p_01ha,
@@ -2782,6 +2782,8 @@ Sys.time() - t
 
 save.image('all_results.RData')
 
+
+
 t <- Sys.time()
 t_ha_LQ <- crop_yield(p_ha = p_01ha,
                       flowers_plant = total_flowers, 
@@ -2794,15 +2796,11 @@ t_ha_LQ <- crop_yield(p_ha = p_01ha,
                       average_weight = F)
 Sys.time() - t
 
-t_ha_LQ$production_ha
-
-
-
 t <- Sys.time()
 t_ha_HQ <- crop_yield(p_ha = p_01ha,
                       flowers_plant = total_flowers, 
                       visits_bee = visits_day_HQ, 
-                      bees_hive = hives_ha(10, 
+                      bees_hive = hives_ha(5, 
                                            mu_pop = 2e4,
                                            seed = 500), 
                       hive_aggregate = T,
@@ -2810,6 +2808,9 @@ t_ha_HQ <- crop_yield(p_ha = p_01ha,
                       average_weight = F)
 Sys.time() - t
 
+t_ha_LQ$production_ha %$% plot(hives, t, type = 'l', col = 'red', 
+                               xlim = c(0, 10), ylim = c(0, 20))
+t_ha_HQ$production_ha %$% lines(hives, t, type = 'l', col = 'blue')
 
 
 
