@@ -2235,7 +2235,7 @@ ppcheck_fun_poll <- lapply(ppcheck_fun_poll, as.matrix)
 
 names(dat_pollen_fun)
 
-par(mfrow = c(2, 2))
+par(mfrow = c(2, 2), mar = c(4, 4, 1, 1))
 
 for (i in 1:4) {
   plot(density(dat_pollen_fun[[i+1]]), col = 'red', main = '',
@@ -2288,14 +2288,14 @@ plot_functions <-
            function(x) {
              
              a <- x[, grep('alpha', colnames(x)), drop = T]
-             b <- x[, grep('beta_', colnames(x)), drop = T]
-             b2 <- x[, grep('beta2', colnames(x)), drop = T]
+             phi1 <- x[, grep('phi1', colnames(x)), drop = T]
+             phi2 <- x[, grep('phi2', colnames(x)), drop = T]
              s <- x[, grep('sigma', colnames(x)), drop = T]
              
              est <- sapply(1:length(z_x), FUN = 
                              function(i) {
                                
-                               mu <- a + b*z_x[i] + b2*z_x[i]^2
+                               mu <- a / (1 + exp(-(phi1 + phi2 * z_x[i]))) 
                                mu
                                
                              }, simplify = 'array')
@@ -2303,7 +2303,7 @@ plot_functions <-
              sim <- sapply(1:length(z_x), FUN = 
                              function(i) {
                                
-                               mu <- a + b*z_x[i] + b2*z_x[i]^2
+                               mu <- a / (1 + exp(-(phi1 + phi2 * z_x[i])))
                                rnorm(1e3, mu, s)
                                
                              }, simplify = 'array')
@@ -2345,30 +2345,37 @@ predict_fruit_size <- function(x,
   }
   df <- post_functions[[grep(cultivar, names(post_functions))]]
   a <- df[, 1, drop = T]
-  b1 <- df[, 2, drop = T]
-  b2 <- df[, 3, drop = T]
+  phi1 <- df[, 2, drop = T]
+  phi2 <- df[, 3, drop = T]
   sigma <- df[, 4, drop = T]
   zeros <- which(x == 0)
   non_zeros <- which(x > 0)
   x_temp <- x[non_zeros]
-  x_temp <- as.vector(scale(x_temp))
-  x_temp2 <- x_temp^2
+  
   n <- length(x_temp)
   
   if (mean_est) {
-    mu <- mean(a) + mean(b1)*x_temp + mean(b2)*x_temp2
-    sigma <- mean(sigma)
-    
     set.seed(seed)
-    out <- rnorm(n, mu, sigma)
+    a <- sample(a, n, T)
+    set.seed(seed)
+    phi1 <- sample(phi1, n, T)
+    set.seed(seed)
+    phi2 <- sample(phi2, n, T)
+    mu <- a / (1 + exp(-(phi1 + phi2 * x_temp)))
+    
+    out <- mu
     
   } else {
+    set.seed(seed)
     a <- sample(a, n, T)
-    b1 <- sample(b1, n, T)
-    b2 <- sample(b2, n, T)
+    set.seed(seed)
+    phi1 <- sample(phi1, n, T)
+    set.seed(seed)
+    phi2 <- sample(phi2, n, T)
+    set.seed(seed)
     sigma <- sample(sigma, n, T)
     
-    mu <- a + b1*x_temp + b2*x_temp2
+    mu <- a / (1 + exp(-(phi1 + phi2 * x_temp)))
     
     set.seed(seed)
     out <- rnorm(n, mu, sigma)
@@ -2380,10 +2387,11 @@ predict_fruit_size <- function(x,
 
 predict_fruit_size <- cmpfun(predict_fruit_size)
 
-par(mfrow = c(1, 1))
-plot(0:500, predict_fruit_size(0:500, cultivar = 'sj', mean_est = F))
-points(0:500, predict_fruit_size(0:500, cultivar = 'pri', mean_est = F), 
-       col = 2)
+
+plot(0:500, predict_fruit_size(0:500, cultivar = 'sch', mean_est = F), col = 2)
+points(0:500, predict_fruit_size(0:500, cultivar = 'sch', mean_est = T), 
+       pch = 16)
+
 # ======= corr size ~ weight ====
 
 fruit_size <- readRDS('fruit_size.rds')
@@ -2537,27 +2545,30 @@ post_size_weight <-
 predict_weight <- 
   function(x, mu_est = T, seed = 123) {
     
-    t <- Sys.time()
     zeros <- which(x == 0)
     non_zeros <- which(x > 0)
     
     n <- length(non_zeros)
     
+    x_tem <- x[non_zeros]
     
     df <- lapply(post_size_weight[-c(4:5)], FUN = 
                    function(i) {
                      x <- rowMeans(i)
-                     x <- rep(x, 6)
+                     x <- rep(x, 20)
                    })
     
-    df$beta <- rep(post_size_weight$beta$beta, 6)
-    df$sigma <- rep(post_size_weight$sigma$sigma, 6)
+    df$beta <- rep(post_size_weight$beta$beta, 20)
+    df$sigma <- rep(post_size_weight$sigma$sigma, 20)
     
     if (mu_est) {
-      df <- lapply(df, mean)
+      df <- lapply(df, FUN =
+                     function(vec){
+                       vec[1:n]
+                     })
       sigma <- df[[5]]
       
-      mu <- df[[1]] + df[[2]] + df[[3]] + exp(df[[4]]*x[non_zeros])
+      mu <- df[[1]] + df[[2]] + df[[3]] + exp(df[[4]]*x_tem)
       out <- mu
       
       if (sum(out < 0) >= 1) {
@@ -2567,14 +2578,14 @@ predict_weight <-
       }
       
     } else {
-      set.seed(seed)
+      
       df <- lapply(df, FUN =
-                       function(vec){
-                         vec[1:n]
-                       })
+                     function(vec){
+                       vec[1:n]
+                     })
       sigma <- df[[5]]
       
-      mu <- df[[1]] + df[[2]] + df[[3]] + exp(df[[4]]*x[non_zeros])
+      mu <- df[[1]] + df[[2]] + df[[3]] + exp(df[[4]]*x_tem)
       
       set.seed(seed)
       out <- rnorm(n, mu, sigma)
@@ -2587,7 +2598,6 @@ predict_weight <-
     
     x[zeros] <- 0
     x[non_zeros] <- out
-    print(Sys.time() - t)
     return(x)
   }
 predict_weight <- cmpfun(predict_weight)
@@ -2600,30 +2610,19 @@ t <- crop_pollination(p_ha = p_01ha,
                       hive_aggregate = T, 
                       short = F)
 
-t2 <- predict_fruit_size(predict_weight(t$Hive10$plant1, 
-                                        mu_est = F))
+size <- predict_fruit_size(t$Hive10$plant1, mean_est = T) 
+weight <- predict_weight(size, mu_est = T)
 
-t$Hive10$plant1[which(t2 < 0)]
-
-t2[t2 < 0]
-
-# valores extremos de posici[on de polen generan] valores nefativos de 
-# tama;o de fruta. Implementar una restricci[on] 
 
 par(mfrow = c(1, 3), mar = c(4, 4, 1, 1))
 plot(density(t$Hive10$plant1))
-plot(density(predict_weight(t2[-c(which(t2 < 0))], mu_est = F)), 
-     xlab = 'Fruit weight g', main = '')
-plot(density(t2[-c(which(t2 < 0))]), xlab = 'Fruit diameter mm', main = '')
+plot(density(predict_fruit_size(t$Hive10$plant1, mean_est = F)), 
+     col = 'red', lwd = 2, xlab = 'Fruit diameter mm', main = '')
+lines(density(size), lwd = 2)
+plot(density(predict_weight(size, mu_est = F)), 
+     xlab = 'Fruit weight g', main = '', lwd = 2, col = 'red')
+lines(density(weight), lwd = 2)
 par(mfrow = c(1, 1))
-
-# t <- sapply(1:2000, FUN =
-#               function(i) {
-#                 xx <- sample(0:20, total_flowers[i], T)
-#                 predict_weight(xx, mu_est = F)
-#               })
-# 
-# plot(total_flowers[1:2000], t)
 
 xx <- sample(0:20, 10e3, T)
 
@@ -2640,8 +2639,6 @@ par(mfrow = c(1, 1))
 
 dat_size_weight %$% plot(fruit_diameter, fruit_weight)
 lines(0:25, predict_weight(0:25, mu_est = T), col = 'red')
-
-
 
 # ====== 8. Crop production =======
 
@@ -2676,7 +2673,7 @@ crop_yield <- function(p_ha, # plants per ha
   message('Starting production simulation (t per ha)')
   
   production_plant <-
-    mclapply(pollen_deposition, FUN =
+    lapply(pollen_deposition, FUN =
                function(colmena) {
                  
                  mu <- lapply(colmena, FUN =
@@ -2695,15 +2692,15 @@ crop_yield <- function(p_ha, # plants per ha
                  mu <- do.call('rbind', mu)
                  mu$plant <- paste('plant', 1:length(colmena))
                  mu
-               }, mc.cores = detectCores() - 1)
+               })
   
   for (i in seq_along(production_plant)) production_plant[[i]]$hives <- i
   
   production_ha <-
-    mclapply(production_plant, FUN =
+    lapply(production_plant, FUN =
                function(ha) {
                  tibble(t = sum(ha$kg_plant)/1e3)
-               }, mc.cores = detectCores() - 1)
+               })
   for (i in seq_along(production_ha)) production_ha[[i]]$hives <- i
   
   production_ha <- do.call('rbind', production_ha)
@@ -2716,90 +2713,90 @@ crop_yield <- function(p_ha, # plants per ha
 }
 
 
-cluster <- makeCluster(detectCores() - 1)
-
-clusterExport(cluster, c('simulated_visits', 'pollen_deposition_fun', 
-                         'total_flowers', 'visits_day', 'hives_ha', 
-                         'p_01ha', 'visits_day_HQ', 'crop_pollination', 
-                         'asymptote', 'slope', 'crop_yield', 
-                         'predict_fruit_size', 'predict_weight',
-                         'post_functions', 'post_size_weight'))
-
-clusterEvalQ(cluster, {
-  pks <- c('tidyverse', 'magrittr', 'cmdstanr',
-           'ggdag', 'dagitty', 'parallel')
-  
-  sapply(pks, library, character.only = T)
-})
+# cluster <- makeCluster(detectCores() - 1)
+# 
+# clusterExport(cluster, c('simulated_visits', 'pollen_deposition_fun', 
+#                          'total_flowers', 'visits_day', 'hives_ha', 
+#                          'p_01ha', 'visits_day_HQ', 'crop_pollination', 
+#                          'asymptote', 'slope', 'crop_yield', 
+#                          'predict_fruit_size', 'predict_weight',
+#                          'post_functions', 'post_size_weight'))
+# 
+# clusterEvalQ(cluster, {
+#   pks <- c('tidyverse', 'magrittr', 'cmdstanr',
+#            'ggdag', 'dagitty', 'parallel')
+#   
+#   sapply(pks, library, character.only = T)
+# })
 
 
 t <- Sys.time()
-t_ha_LQ <- parLapply(cluster, 1:100, fun = 
-                       function(i) {
-                         
-                         l <- crop_yield(p_ha = p_01ha,
-                                         flowers_plant = total_flowers, 
-                                         visits_bee = visits_day, 
-                                         bees_hive = hives_ha(20, 
-                                                              mu_pop = 1e4,
-                                                              seed = 500+i), 
-                                         hive_aggregate = T,
-                                         average_diameter = F, 
-                                         average_weight = F)
-                         
-                         l$production_ha$sim <- paste('sim', i, sep = '')
-                         l$production_ha_plant <- 
-                           do.call('rbind', l$production_ha_plant)
-                         l$production_ha_plant <- paste('sim', i, sep = '')
-                         l
-                       })
+t_ha_LQ <- lapply(1:100, fun = 
+                    function(i) {
+                      
+                      l <- crop_yield(p_ha = p_01ha,
+                                      flowers_plant = total_flowers, 
+                                      visits_bee = visits_day, 
+                                      bees_hive = hives_ha(20, 
+                                                           mu_pop = 1e4,
+                                                           seed = 500+i), 
+                                      hive_aggregate = T,
+                                      average_diameter = F, 
+                                      average_weight = F)
+                      
+                      l$production_ha$sim <- paste('sim', i, sep = '')
+                      l$production_ha_plant <- 
+                        do.call('rbind', l$production_ha_plant)
+                      l$production_ha_plant <- paste('sim', i, sep = '')
+                      l
+                    })
 
 Sys.time() - t
 
 save.image('all_results.RData')
 
 t <- Sys.time()
-t_ha_HQ <- parLapply(cluster, 1:100, fun = 
-                       function(i) {
-                         
-                         l <- crop_yield(p_ha = p_01ha,
-                                         flowers_plant = total_flowers, 
-                                         visits_bee = visits_day_HQ, 
-                                         bees_hive = hives_ha(20, 
-                                                              mu_pop = 2e4,
-                                                              seed = 500+i), 
-                                         hive_aggregate = T,
-                                         average_diameter = F, 
-                                         average_weight = F)
-                         
-                         l$production_ha$sim <- paste('sim', i, sep = '')
-                         temp2$production_ha_plant
-                         l$production_ha$sim <- paste('sim', i, sep = '')
-                         l$production_ha_plant <- 
-                           do.call('rbind', l$production_ha_plant)
-                         l$production_ha_plant <- paste('sim', i, sep = '')
-                         l
-                       })
+t_ha_HQ <- lapply(1:100, fun = 
+                    function(i) {
+                      
+                      l <- crop_yield(p_ha = p_01ha,
+                                      flowers_plant = total_flowers, 
+                                      visits_bee = visits_day_HQ, 
+                                      bees_hive = hives_ha(20, 
+                                                           mu_pop = 2e4,
+                                                           seed = 500+i), 
+                                      hive_aggregate = T,
+                                      average_diameter = F, 
+                                      average_weight = F)
+                      
+                      l$production_ha$sim <- paste('sim', i, sep = '')
+                      temp2$production_ha_plant
+                      l$production_ha$sim <- paste('sim', i, sep = '')
+                      l$production_ha_plant <- 
+                        do.call('rbind', l$production_ha_plant)
+                      l$production_ha_plant <- paste('sim', i, sep = '')
+                      l
+                    })
 
 Sys.time() - t
 
 save.image('all_results.RData')
-
-
-
-
 
 t <- Sys.time()
 t_ha_LQ <- crop_yield(p_ha = p_01ha,
                       flowers_plant = total_flowers, 
                       visits_bee = visits_day, 
-                      bees_hive = hives_ha(1, 
+                      bees_hive = hives_ha(5,
                                            mu_pop = 1e4,
                                            seed = 500), 
                       hive_aggregate = T,
                       average_diameter = F, 
                       average_weight = F)
 Sys.time() - t
+
+t_ha_LQ$production_ha
+
+
 
 t <- Sys.time()
 t_ha_HQ <- crop_yield(p_ha = p_01ha,
@@ -2814,69 +2811,8 @@ t_ha_HQ <- crop_yield(p_ha = p_01ha,
 Sys.time() - t
 
 
-temp2$production_ha
 
 
-
-
-
-
-
-
-t <- Sys.time()
-temp2 <- crop_yield(p_ha = p_01ha,
-                    flowers_plant = total_flowers, 
-                    visits_bee = visits_day, 
-                    bees_hive = hives_ha(3, 
-                                         seed = 500), 
-                    hive_aggregate = T,
-                    average_diameter = F, 
-                    average_weight = F)
-Sys.time() - t
-
-temp2$production_ha
-temp2$production_ha_plant
-
-temp <- crop_pollination(p_ha = p_01ha,
-                          flowers_plant = total_flowers, 
-                          visits_bee = visits_day, 
-                          bees_hive = hives_ha(1, seed = 500), 
-                          hive_aggregate = T, 
-                          short = F)
-temp$Hive1[1]
-
-temp1 <- simulated_visits(p_ha = p_01ha,
-                          flowers_plant = total_flowers, 
-                          visits_bee = visits_day, 
-                          bees_hive = hives_ha(1, seed = 500), 
-                          hive_aggregate = T, 
-                          short = F)
-temp1$Hive1[1]
-
-
-
-
-
-temp2 <- crop_pollination(p_ha = p_01ha,
-                          flowers_plant = total_flowers, 
-                          visits_bee = visits_day, 
-                          bees_hive = hives_ha(5, seed = 500), 
-                          hive_aggregate = T, 
-                          short = F)
-
-
-temp2 <- crop_yield(p_ha = 50,
-                    flowers_plant = total_flowers, 
-                    visits_bee = visits_day, 
-                    bees_hive = hives_ha(2, 
-                                         mu_pop = 1e4,
-                                         seed = 500), 
-                    hive_aggregate = T,
-                    average_diameter = F, 
-                    average_weight = F)
-
-temp2$Hive1
-temp2$production_ha
 ####### continuar con las figuras de los outputs
 
 
