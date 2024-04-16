@@ -1699,7 +1699,7 @@ crop_pollination <- function(p_ha, # plants per ha
 
 crop_pollination <- cmpfun(crop_pollination)
 
-cluster <- makeCluster(detectCores() - 1)
+cluster <- makeCluster(8)
 
 clusterExport(cluster, c('simulated_visits', 'pollen_deposition_fun', 
                          'total_flowers', 'visits_day', 'hives_ha', 
@@ -1732,23 +1732,6 @@ Sys.time() - t
 
 pollen_LQ <- do.call('rbind', pollen_LQ) 
 
-# pollen_LQ <- vector('list', 50)
-# 
-# names(pollen_LQ) <- paste('sim', 1:length(pollen_LQ), sep = '')
-# 
-# for (i in seq_along(pollen_LQ)) {
-#   
-#   pollen_LQ[[i]] <- crop_pollination(p_ha = p_01ha,
-#                                      flowers_plant = total_flowers, 
-#                                      visits_bee = visits_day, 
-#                                      bees_hive = hives_ha(20, seed = i+500), 
-#                                      hive_aggregate = T)
-#   pollen_LQ[[i]]$sim <- paste('sim', i, sep = '')
-#   
-#   print(paste('simulation', i, 'done'))
-# }
-# 
-# pollen_LQ <- do.call('rbind', pollen_LQ) 
 
 t <- Sys.time()
 pollen_HQ <- 
@@ -1773,23 +1756,6 @@ rm(list = 'cluster')
 pollen_HQ <- do.call('rbind', pollen_HQ)
 
 
-# names(pollen_HQ) <- paste('sim', 1:length(pollen_HQ), sep = '')
-# 
-# for (i in seq_along(pollen_HQ)) {
-#   
-#   pollen_HQ[[i]] <- crop_pollination(p_ha = p_01ha,
-#                                      flowers_plant = total_flowers, 
-#                                      visits_bee = visits_day_HQ, 
-#                                      bees_hive = hives_ha(20, mu_pop = 20e3, 
-#                                                           seed = i+500), 
-#                                      hive_aggregate = T)
-#   
-#   pollen_HQ[[i]]$sim <- paste('sim', i, sep = '')
-#   
-#   print(paste('simulation', i, 'done'))
-# }
-# 
-# pollen_HQ <- do.call('rbind', pollen_HQ)
 
 pollen_LQ$quality <- 'low'
 pollen_HQ$quality <- 'hight'
@@ -2654,7 +2620,8 @@ crop_yield <- function(p_ha, # plants per ha
                        seed = 123, 
                        fruit_diameter = F,
                        average_diameter = T,
-                       average_weight = T) {
+                       average_weight = T, 
+                       cultivar = 'sch') {
   
   message('Starting floral visits')
   t1 <- Sys.time()
@@ -2678,7 +2645,7 @@ crop_yield <- function(p_ha, # plants per ha
                  
                  mu <- lapply(colmena, FUN =
                                 function(planta) {
-                                  t <- predict_fruit_size(planta,
+                                  t <- predict_fruit_size(planta, cultivar = cultivar,
                                                           mean_est = average_diameter)
                                   t1 <- predict_weight(t, mu_est = average_weight)
                                   
@@ -2713,26 +2680,26 @@ crop_yield <- function(p_ha, # plants per ha
 }
 
 
-# cluster <- makeCluster(detectCores() - 1)
-# 
-# clusterExport(cluster, c('simulated_visits', 'pollen_deposition_fun', 
-#                          'total_flowers', 'visits_day', 'hives_ha', 
-#                          'p_01ha', 'visits_day_HQ', 'crop_pollination', 
-#                          'asymptote', 'slope', 'crop_yield', 
-#                          'predict_fruit_size', 'predict_weight',
-#                          'post_functions', 'post_size_weight'))
-# 
-# clusterEvalQ(cluster, {
-#   pks <- c('tidyverse', 'magrittr', 'cmdstanr',
-#            'ggdag', 'dagitty', 'parallel')
-#   
-#   sapply(pks, library, character.only = T)
-# })
+cluster <- makeCluster(8)
+
+clusterExport(cluster, c('simulated_visits', 'pollen_deposition_fun',
+                         'total_flowers', 'visits_day', 'hives_ha',
+                         'p_01ha', 'visits_day_HQ', 'crop_pollination',
+                         'asymptote', 'slope', 'crop_yield',
+                         'predict_fruit_size', 'predict_weight',
+                         'post_functions', 'post_size_weight'))
+
+clusterEvalQ(cluster, {
+  pks <- c('magrittr', 'parallel', "compiler", "tidyverse")
+
+  sapply(pks, library, character.only = T)
+})
 
 
 t <- Sys.time()
-t_ha_LQ <- lapply(1:50, fun = 
+t_ha_LQ <- parLapply(cluster, 1:50, fun = 
                     function(i) {
+                      message(paste('simulation', i))
                       
                       l <- crop_yield(p_ha = p_01ha,
                                       flowers_plant = total_flowers, 
@@ -2742,22 +2709,29 @@ t_ha_LQ <- lapply(1:50, fun =
                                                            seed = 500+i), 
                                       hive_aggregate = T,
                                       average_diameter = F, 
-                                      average_weight = F)
+                                      average_weight = F, 
+                                      cultivar = 'sch')
                       
                       l$production_ha$sim <- paste('sim', i, sep = '')
+                      l$production_ha$type <- 'LQ'
                       l$production_ha_plant <- 
                         do.call('rbind', l$production_ha_plant)
-                      l$production_ha_plant <- paste('sim', i, sep = '')
+                      l$production_ha_plant$sim <- paste('sim', i, sep = '')
+                      l$production_ha_plant$sim <- paste('sim', i, sep = '')
+                      l$production_ha_plant$type <- 'LQ'
                       l
                     })
 
 Sys.time() - t
 
+names(t_ha_LQ) <- paste('sim', 1:length(t_ha_LQ), sep = '')
+
 save.image('all_results.RData')
 
 t <- Sys.time()
-t_ha_HQ <- lapply(1:50, fun = 
+t_ha_HQ <- parLapply(cluster, 1:50, fun = 
                     function(i) {
+                      message(paste('simulation', i))
                       
                       l <- crop_yield(p_ha = p_01ha,
                                       flowers_plant = total_flowers, 
@@ -2767,20 +2741,114 @@ t_ha_HQ <- lapply(1:50, fun =
                                                            seed = 500+i), 
                                       hive_aggregate = T,
                                       average_diameter = F, 
-                                      average_weight = F)
+                                      average_weight = F, 
+                                      cultivar = 'sch')
                       
                       l$production_ha$sim <- paste('sim', i, sep = '')
-                      temp2$production_ha_plant
-                      l$production_ha$sim <- paste('sim', i, sep = '')
+                      l$production_ha$type <- 'HQ'
                       l$production_ha_plant <- 
                         do.call('rbind', l$production_ha_plant)
-                      l$production_ha_plant <- paste('sim', i, sep = '')
+                      l$production_ha_plant$sim <- paste('sim', i, sep = '')
+                      l$production_ha_plant$type <- 'HQ'
                       l
                     })
 
 Sys.time() - t
 
+stopCluster(cluster)
+rm(list = "cluster")
+
+names(t_ha_HQ) <- paste('sim', 1:length(t_ha_HQ), sep = '')
+
 save.image('all_results.RData')
+
+sims_lq <- lapply(t_ha_LQ, FUN = 
+                 function(x) {
+                   x$production_ha
+                 })
+
+sims_lq <- do.call('rbind', sims_lq)
+
+sims_hq <- lapply(t_ha_HQ, FUN = 
+                    function(x) {
+                      x$production_ha
+                    })
+
+sims_hq <- do.call('rbind', sims_hq)
+
+
+sims <- rbind(sims_lq, sims_hq)
+
+
+sims |> 
+  ggplot(aes(hives, t, linetype = sim, color = type)) +
+  geom_line() +
+  scale_color_manual(values = c('tan1', 'lightblue')) +
+  scale_linetype_manual(values = rep(1, 60)) +
+  theme_bw() +
+  labs(y = 't ha', x = 'Hive density (ha)') +
+  theme(legend.position = 'none')
+
+sims_lq2 <- lapply(t_ha_LQ, FUN = 
+                    function(x) {
+                      x$production_ha_plant
+                    })
+
+sims_lq2 <- do.call('rbind', sims_lq2)
+
+sims_lq2$type <- 'LQ'
+
+sims_hq2 <- lapply(t_ha_HQ, FUN = 
+                    function(x) {
+                      x$production_ha_plant
+                    })
+
+sims_hq2 <- do.call('rbind', sims_hq2)
+
+
+sims2 <- rbind(sims_lq2, sims_hq2)
+
+sims2$hives <- as.factor(sims2$hives)
+
+sims2 |> 
+  ggplot(aes(hives, kg_plant, fill = type)) +
+  geom_boxplot(outlier.alpha = 0) +
+  lims(y = c(0, 15)) +
+  scale_fill_manual(values = c('tan1', 'lightblue')) +
+  theme_bw() +
+  theme(legend.position = 'none')
+  
+
+sims2 |> 
+  ggplot(aes(hives, mu_fruit_size, fill = type)) +
+  geom_boxplot(outlier.alpha = 0) +
+  lims(y = c(0, 15)) +
+  scale_fill_manual(values = c('tan1', 'lightblue')) +
+  theme_bw() +
+  theme(legend.position = 'none')
+
+
+sims2 |> 
+  ggplot(aes(hives, sd_fruit_size, fill = type)) +
+  geom_boxplot(outlier.alpha = 0) +
+  scale_fill_manual(values = c('tan1', 'lightblue')) +
+  theme_bw() +
+  theme(legend.position = 'none')
+
+sims2 |> 
+  ggplot(aes(hives, sd_fruit_weight, fill = type)) +
+  geom_boxplot(outlier.alpha = 0) +
+  scale_fill_manual(values = c('tan1', 'lightblue')) +
+  theme_bw() +
+  theme(legend.position = 'none')
+
+
+
+summary(sims$t)
+
+
+
+
 
 
 
@@ -2788,7 +2856,7 @@ t <- Sys.time()
 t_ha_LQ <- crop_yield(p_ha = p_01ha,
                       flowers_plant = total_flowers, 
                       visits_bee = visits_day, 
-                      bees_hive = hives_ha(5,
+                      bees_hive = hives_ha(1,
                                            mu_pop = 1e4,
                                            seed = 500), 
                       hive_aggregate = T,
