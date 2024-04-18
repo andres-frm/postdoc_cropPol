@@ -2789,6 +2789,15 @@ sims |>
   labs(y = 't ha', x = 'Hive density (ha)') +
   theme(legend.position = 'none')
 
+sims |> 
+  ggplot(aes(as.numeric(hives), t, linetype = sim, color = type)) +
+  geom_jitter(size = 0.5) +
+  scale_color_manual(values = c('tan1', 'lightblue')) +
+  scale_shape_manual(values = rep(1, 60)) +
+  theme_bw() +
+  labs(y = 't ha', x = 'Hive density (ha)') +
+  theme(legend.position = 'none')
+
 sims_lq2 <- lapply(t_ha_LQ, FUN = 
                     function(x) {
                       x$production_ha_plant
@@ -2818,6 +2827,24 @@ sims2 |>
   theme_bw() +
   theme(legend.position = 'none')
   
+
+sims2.2 <- 
+  sims2 |> 
+  group_by(hives, type) |> 
+  transmute(mu_t = median(kg_plant), 
+            li_t = quantile(kg_plant, 0.025), 
+            ls_t = quantile(kg_plant, 0.975), 
+            mu_sd_f = median(sd_fruit_size), 
+            li_sd_f = quantile(sd_fruit_size, 0.025), 
+            ls_sd_f = quantile(sd_fruit_size, 0.975)) |> 
+  unique()
+
+sims2.2 |> 
+  ggplot(aes(as.numeric(hives), y = mu_t, 
+             ymin = li_t, ymax = ls_t, color = type, 
+             fill = type)) +
+  geom_ribbon(alpha = 0.3) +
+  geom_line()
 
 sims2 |> 
   ggplot(aes(hives, mu_fruit_size, fill = type)) +
