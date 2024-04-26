@@ -1034,6 +1034,8 @@ Sys.time() - t1
 
 p <- do.call('rbind', p) 
 
+p <- readRDS('p_LQ.rds')
+
 t1 <- Sys.time()
 p_HQ <- parLapply(cluster, 1:100, fun = 
                  function(i) {
@@ -1055,6 +1057,8 @@ rm(list = 'cluster')
 
 p_HQ <- do.call('rbind', p_HQ)
 
+p_HQ <- readRDS('p_HQ.rds')
+
 p$quality <- 'low'
 p_HQ$quality <- 'hight'
 
@@ -1068,11 +1072,14 @@ vis_hives |>
   geom_line(alpha = 0.3) + #geom_ribbon(alpha = 0.2) +
   labs(x = 'Hives per blueberry ha', 
        y = 'Average flower visits per flower\n at crop level') +
-  scale_shape_manual(values = rep(1, 100)) +
+  scale_shape_manual(values = rep(1, 1000)) +
   scale_color_manual(values = c('lightblue3', 'tan1')) +
   theme_bw() +
   theme(legend.position = 'none', 
         panel.grid = element_blank())
+
+ggsave('floral_visits.jpg', width = 10, height = 8, 
+       units = 'cm', dpi = 500)
 
 
 
@@ -1732,6 +1739,7 @@ Sys.time() - t
 
 pollen_LQ <- do.call('rbind', pollen_LQ) 
 
+pollen_LQ <- readRDS('pollen_LQ.rds')
 
 t <- Sys.time()
 pollen_HQ <- 
@@ -1755,7 +1763,7 @@ rm(list = 'cluster')
 
 pollen_HQ <- do.call('rbind', pollen_HQ)
 
-
+pollen_HQ <- readRDS('pollen_HQ.rds')
 
 pollen_LQ$quality <- 'low'
 pollen_HQ$quality <- 'hight'
@@ -1766,28 +1774,30 @@ plot_vis_hive <-
   vis_hives |> 
   ggplot(aes(as.numeric(n_hives), mu, shape = sim,
              ymin = li, ymax = ls, color = quality)) +
-  geom_line(alpha = 1, linewidth = 0.15) + #geom_ribbon(alpha = 0.2) +
-  labs(x = 'Hives per blueberry ha', 
+  geom_line(linewidth = 0.05) + #geom_ribbon(alpha = 0.2) +
+  labs(x = expression('Hives ha'^-1), 
        y = 'Average flower visits per flower\n at crop level') +
-  scale_shape_manual(values = rep(1, 100)) +
+  scale_shape_manual(values = rep(1, 1000)) +
   scale_color_manual(values = c('lightblue3', 'tan1')) +
   theme_bw() +
   theme(legend.position = 'none', 
-        panel.grid = element_blank())
+        panel.grid = element_blank(), 
+        text = element_text(family = 'Times New Roman'))
 
 plot_pollen_hive <- 
   pollen_hives |> 
   ggplot(aes(as.numeric(n_hives), mu, shape = sim,
              ymin = li, ymax = ls, color = quality)) +
-  geom_line(linewidth = 0.15) + #geom_ribbon(alpha = 0.2) +
-  labs(x = 'Hives per blueberry ha', 
+  geom_line(linewidth = 0.05) + #geom_ribbon(alpha = 0.2) +
+  labs(x = expression('Hives ha'^-1), 
        y = 'Average pollen deposition per flower\n at crop level') +
-  scale_shape_manual(values = rep(1, 100)) +
+  scale_shape_manual(values = rep(1, 1000)) +
   scale_color_manual(values = c('lightblue3', 'tan1')) +
   geom_hline(yintercept = c(112, 274), linetype = 2, color = 'red') +
   theme_bw() +
   theme(legend.position = 'none', 
-        panel.grid = element_blank())
+        panel.grid = element_blank(), 
+        text = element_text(family = 'Times New Roman'))
 
 plot_grid(plot_vis_hive, plot_pollen_hive, ncol = 2)
 
@@ -2726,7 +2736,7 @@ Sys.time() - t
 
 names(t_ha_LQ) <- paste('sim', 1:length(t_ha_LQ), sep = '')
 
-save.image('all_results.RData')
+t_ha_LQ <- readRDS('t_ha_LQ.rds')
 
 t <- Sys.time()
 t_ha_HQ <- parLapply(cluster, 1:50, fun = 
@@ -2760,7 +2770,7 @@ rm(list = "cluster")
 
 names(t_ha_HQ) <- paste('sim', 1:length(t_ha_HQ), sep = '')
 
-save.image('all_results.RData')
+t_ha_HQ <- readRDS('t_ha_HQ.rds')
 
 sims_lq <- lapply(t_ha_LQ, FUN = 
                  function(x) {
@@ -2782,34 +2792,56 @@ sims <- rbind(sims_lq, sims_hq)
 
 sims |> 
   ggplot(aes(hives, t, linetype = sim, color = type)) +
-  geom_line() +
+  geom_line(linewidth = 0.08) +
   scale_color_manual(values = c('tan1', 'lightblue')) +
-  scale_linetype_manual(values = rep(1, 60)) +
+  scale_linetype_manual(values = rep(1, 500)) +
   theme_bw() +
-  labs(y = 't ha', x = 'Hive density (ha)') +
-  theme(legend.position = 'none')
+  labs(y = expression('Production'~'(t ha'^-1~')'), 
+       x = 'Hive density (ha)') +
+  theme(legend.position = 'none', 
+        panel.grid = element_blank(), 
+        text = element_text(family = 'Times New Roman'))
+
+ggsave('production_ha.jpg', width = 10, height = 8, 
+       units = 'cm', dpi = 500)
 
 sims |> 
   ggplot(aes(as.numeric(hives), t, linetype = sim, color = type)) +
   geom_jitter(size = 0.5) +
   scale_color_manual(values = c('tan1', 'lightblue')) +
-  scale_shape_manual(values = rep(1, 60)) +
+  scale_shape_manual(values = rep(1, 500)) +
   theme_bw() +
   labs(y = 't ha', x = 'Hive density (ha)') +
   theme(legend.position = 'none')
 
 sims_lq2 <- lapply(t_ha_LQ, FUN = 
                     function(x) {
-                      x$production_ha_plant
+                      x[[2]] |> 
+                        group_by(hives, sim) |> 
+                        transmute(kg_plant_mu = mean(kg_plant), 
+                                  kg_plant_sd = sd(kg_plant),
+                                  mu_fruit_size = mean(mu_fruit_size), 
+                                  sd_fruit_size = mean(sd_fruit_size), 
+                                  mu_fruit_weight = mean(mu_fruit_weight), 
+                                  sd_fruit_weight = mean(sd_fruit_weight),
+                                  type = type) |> 
+                        unique()
                     })
 
 sims_lq2 <- do.call('rbind', sims_lq2)
 
-sims_lq2$type <- 'LQ'
-
 sims_hq2 <- lapply(t_ha_HQ, FUN = 
                     function(x) {
-                      x$production_ha_plant
+                      x[[2]] |> 
+                        group_by(hives, sim) |> 
+                        transmute(kg_plant_mu = mean(kg_plant), 
+                                  kg_plant_sd = sd(kg_plant),
+                                  mu_fruit_size = mean(mu_fruit_size), 
+                                  sd_fruit_size = mean(sd_fruit_size), 
+                                  mu_fruit_weight = mean(mu_fruit_weight), 
+                                  sd_fruit_weight = mean(sd_fruit_weight),
+                                  type = type) |> 
+                        unique()
                     })
 
 sims_hq2 <- do.call('rbind', sims_hq2)
