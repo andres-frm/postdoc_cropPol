@@ -1,6 +1,6 @@
 pks <- c('tidyverse', 'rethinking', 'rstan', 'magrittr', 'cmdstanr',
          'ggdag', 'dagitty', 'readxl', 'brms', 'cowplot', 'parallel', 
-         'compiler')
+         'compiler', 'KneeArrower')
 
 sapply(pks, library, character.only = T)
 
@@ -1722,7 +1722,7 @@ clusterEvalQ(cluster, {
 
 t <- Sys.time()
 pollen_LQ <- 
-  parLapply(cluster, 1:100, fun = 
+  parLapply(cluster, 1:1000, fun = 
               function(i) {
                 
                 x <- crop_pollination(p_ha = p_01ha,
@@ -1743,7 +1743,7 @@ pollen_LQ <- readRDS('pollen_LQ.rds')
 
 t <- Sys.time()
 pollen_HQ <- 
-  parLapply(cluster, 1:100, fun = 
+  parLapply(cluster, 1:1000, fun = 
               function(i) {
                 
                 x <- crop_pollination(p_ha = p_01ha,
@@ -1774,7 +1774,7 @@ plot_vis_hive <-
   vis_hives |> 
   ggplot(aes(as.numeric(n_hives), mu, shape = sim,
              ymin = li, ymax = ls, color = quality)) +
-  geom_line(linewidth = 0.05) + #geom_ribbon(alpha = 0.2) +
+  geom_line(linewidth = 0.05, alpha = 0.5) + #geom_ribbon(alpha = 0.2) +
   labs(x = expression('Hives ha'^-1), 
        y = 'Average flower visits per flower\n at crop level') +
   scale_shape_manual(values = rep(1, 1000)) +
@@ -1788,7 +1788,7 @@ plot_pollen_hive <-
   pollen_hives |> 
   ggplot(aes(as.numeric(n_hives), mu, shape = sim,
              ymin = li, ymax = ls, color = quality)) +
-  geom_line(linewidth = 0.05) + #geom_ribbon(alpha = 0.2) +
+  geom_line(linewidth = 0.05, alpha = 0.5) + #geom_ribbon(alpha = 0.2) +
   labs(x = expression('Hives ha'^-1), 
        y = 'Average pollen deposition per flower\n at crop level') +
   scale_shape_manual(values = rep(1, 1000)) +
@@ -2777,6 +2777,83 @@ sims_lq <- lapply(t_ha_LQ, FUN =
                    x$production_ha
                  })
 
+cat(file = 'knee_point_sims.stan', 
+    '
+    data{
+      int N;
+      array[N] int x;
+      vector[N] y;
+    }
+    
+    parameters{
+      real alpha;
+      real phi1;
+      real phi2;
+      real<lower = 0> sigma;
+    }
+    
+    model{
+      vector[N] mu;
+      alpha ~ normal(10, 1);
+      phi1 ~ normal(0, 0.5);
+      phi2 ~ normal(0, 0.5);
+      sigma ~ exponential(1);
+      
+      for (i in 1:N) { 
+        mu[i] = alpha/(1+exp(-(phi1 + phi2 * x[i])));
+      }
+    
+      y ~ normal(mu, sigma);
+    }
+    
+    generated quantities{
+      vector[N] mu;
+      vector[N] log_lik;
+      
+      for (i in 1:N) { 
+        mu[i] = alpha/(1+exp(-(phi1 + phi2 * x[i])));
+      }
+    
+      for (i in 1:N) log_lik[i] = normal_lpdf(y[i] | mu[i], sigma);
+    }
+    ')
+
+file <- paste(getwd(), '/knee_point_sims.stan', sep = '')
+fit_knee <- cmdstan_model(file, compile = T)
+
+knee_lq <-
+  lapply(1:length(sims_lq), FUN =
+           function(i) {
+             message(paste('simulation ', i))
+             mod_knee <- 
+               fit_knee$sample(
+                 data = list(x = 1:20,
+                             y = sims_lq[[i]]$t, 
+                             N = 20),
+                 chains = 3, 
+                 parallel_chains = 3,
+                 iter_sampling = 2e3,
+                 iter_warmup = 500,
+                 thin = 3,
+                 refresh = 1e3,
+                 seed = 123
+               )
+             
+             out_knee <- mod_knee$summary()
+             
+             alpha <- out_knee$mean[2]
+             phi1 <- out_knee$mean[3]
+             phi2 <- out_knee$mean[4]
+             
+             knee <- findCutoff(1:20, alpha/(1+exp(-(phi1 + phi2 * 1:20))))
+             
+             tibble(x = knee$x, 
+                    y = knee$y)
+             
+           })
+
+knee_lq <- do.call('rbind', knee_lq)
+
 sims_lq <- do.call('rbind', sims_lq)
 
 sims_hq <- lapply(t_ha_HQ, FUN = 
@@ -2784,36 +2861,117 @@ sims_hq <- lapply(t_ha_HQ, FUN =
                       x$production_ha
                     })
 
+knee_hq <-
+  lapply(1:length(sims_hq), FUN =
+           function(i) {
+             
+             message(paste('simulation ', i))
+             
+             mod_knee <- 
+               fit_knee$sample(
+                 data = list(x = 1:20,
+                             y = sims_hq[[i]]$t, 
+                             N = 20),
+                 chains = 3, 
+                 parallel_chains = 3,
+                 iter_sampling = 2e3,
+                 iter_warmup = 500,
+                 thin = 3,
+                 refresh = 1e3,
+                 seed = 123
+               )
+             
+             out_knee <- mod_knee$summary()
+             
+             alpha <- out_knee$mean[2]
+             phi1 <- out_knee$mean[3]
+             phi2 <- out_knee$mean[4]
+             
+             knee <- findCutoff(1:20, alpha/(1+exp(-(phi1 + phi2 * 1:20))))
+             
+             tibble(x = knee$x, 
+                    y = knee$y)
+           })
+
+knee_hq <- do.call('rbind', knee_hq)
+
 sims_hq <- do.call('rbind', sims_hq)
 
 
 sims <- rbind(sims_lq, sims_hq)
 
 
-sims |> 
-  ggplot(aes(hives, t, linetype = sim, color = type)) +
-  geom_line(linewidth = 0.08) +
+ggplot() +
+  geom_line(data = sims, aes(hives, t, linetype = sim, color = type), 
+            linewidth = 0.08, alpha = 0.5) +
   scale_color_manual(values = c('tan1', 'lightblue')) +
   scale_linetype_manual(values = rep(1, 500)) +
   theme_bw() +
   labs(y = expression('Production'~'(t ha'^-1~')'), 
-       x = 'Hive density (ha)') +
+       x = expression('Hive density (ha'^-1~')')) +
   theme(legend.position = 'none', 
         panel.grid = element_blank(), 
         text = element_text(family = 'Times New Roman'))
 
 ggsave('production_ha.jpg', width = 10, height = 8, 
-       units = 'cm', dpi = 500)
+       units = 'cm', dpi = 700)
 
-sims |> 
-  ggplot(aes(as.numeric(hives), t, linetype = sim, color = type)) +
-  geom_jitter(size = 0.5) +
+knee_hq_boot <- sapply(1:2e3, FUN = 
+                         function(x) {
+                           mean(sample(knee_hq$x, length(knee_hq$x), replace = T))
+                         })
+
+knee_lq_boot <- sapply(1:2e3, FUN = 
+                         function(x) {
+                           mean(sample(knee_lq$x, length(knee_hq$x), replace = T))
+                         })
+
+knee_lims <- tibble(lq = c(min(knee_lq_boot), max(knee_lq_boot)), 
+                    hq = c(min(knee_hq_boot), max(knee_hq_boot)))
+
+ggplot() +
+  geom_line(data = sims, aes(hives, t, linetype = sim, color = type), 
+            linewidth = 0.08, alpha = 0.25) +
   scale_color_manual(values = c('tan1', 'lightblue')) +
-  scale_shape_manual(values = rep(1, 500)) +
+  scale_linetype_manual(values = rep(1, 500)) +
+  geom_point(data = knee_lq, aes(x, y), color = 'lightblue', 
+             shape = 1, 
+             size = 0.2) +
+  geom_point(data = knee_hq, aes(x, y), color = 'tan1', 
+             shape = 3, 
+             size = 0.2) +
   theme_bw() +
-  labs(y = 't ha', x = 'Hive density (ha)') +
-  theme(legend.position = 'none')
+  labs(y = expression('Production'~'(t ha'^-1~')'), 
+       x = expression('Hive density (ha'^-1~')')) +
+  theme(legend.position = 'none', 
+        panel.grid = element_blank(), 
+        text = element_text(family = 'Times New Roman'))
 
+ggsave('production_ha2.jpg', width = 10, height = 8, 
+       units = 'cm', dpi = 700)
+
+knee_hq$type <- 'High quality'
+knee_lq$type <- 'Low quality'
+
+knee <- rbind(knee_hq, knee_lq)
+
+knee |> 
+  ggplot(aes(type, x, color = type, fill = type)) +
+  geom_boxplot(alpha = 0.5, width = 0.4, outlier.alpha = 0) +
+  scale_y_continuous(breaks = seq(1, 20, by = 2)) +
+  geom_jitter(aes(type, x), width = 0.1, alpha = 0.5, size = 0.5) +
+  scale_color_manual(values = c('tan1', 'lightblue')) +
+  scale_fill_manual(values = c('tan1', 'lightblue')) +
+  labs(y = expression('Hive density (ha'^-1~')'), x = NULL) +
+  theme_bw() +
+  theme(legend.position = 'none', 
+        panel.grid = element_blank(), 
+        text = element_text(family = 'Times New Roman'))
+
+ggsave('hive_ha.jpg', width = 10, height = 8, 
+       units = 'cm', dpi = 700)
+
+ 
 sims_lq2 <- lapply(t_ha_LQ, FUN = 
                     function(x) {
                       x[[2]] |> 
@@ -2849,331 +3007,31 @@ sims_hq2 <- do.call('rbind', sims_hq2)
 
 sims2 <- rbind(sims_lq2, sims_hq2)
 
-sims2$hives <- as.factor(sims2$hives)
-
-sims2 |> 
-  ggplot(aes(hives, kg_plant, fill = type)) +
-  geom_boxplot(outlier.alpha = 0) +
-  lims(y = c(0, 15)) +
-  scale_fill_manual(values = c('tan1', 'lightblue')) +
-  theme_bw() +
-  theme(legend.position = 'none')
-  
-
-sims2.2 <- 
+sims_lims <- 
   sims2 |> 
   group_by(hives, type) |> 
-  transmute(mu_t = median(kg_plant), 
-            li_t = quantile(kg_plant, 0.025), 
-            ls_t = quantile(kg_plant, 0.975), 
-            mu_sd_f = median(sd_fruit_size), 
-            li_sd_f = quantile(sd_fruit_size, 0.025), 
-            ls_sd_f = quantile(sd_fruit_size, 0.975)) |> 
-  unique()
+  transmute(li = quantile(sd_fruit_size, 0.025),
+            ls = quantile(sd_fruit_size, 0.975)) |> 
+  unique() 
 
-sims2.2 |> 
-  ggplot(aes(as.numeric(hives), y = mu_t, 
-             ymin = li_t, ymax = ls_t, color = type, 
-             fill = type)) +
-  geom_ribbon(alpha = 0.3) +
-  geom_line()
-
-sims2 |> 
-  ggplot(aes(hives, mu_fruit_size, fill = type)) +
-  geom_boxplot(outlier.alpha = 0) +
-  lims(y = c(0, 15)) +
-  scale_fill_manual(values = c('tan1', 'lightblue')) +
-  theme_bw() +
-  theme(legend.position = 'none')
-
-
-sims2 |> 
-  ggplot(aes(hives, sd_fruit_size, fill = type)) +
-  geom_boxplot(outlier.alpha = 0) +
-  scale_fill_manual(values = c('tan1', 'lightblue')) +
-  theme_bw() +
-  theme(legend.position = 'none')
-
-sims2 |> 
-  ggplot(aes(hives, sd_fruit_weight, fill = type)) +
-  geom_boxplot(outlier.alpha = 0) +
-  scale_fill_manual(values = c('tan1', 'lightblue')) +
-  theme_bw() +
-  theme(legend.position = 'none')
-
-
-
-summary(sims$t)
-
-
-
-
-
-
-
-t <- Sys.time()
-t_ha_LQ <- crop_yield(p_ha = p_01ha,
-                      flowers_plant = total_flowers, 
-                      visits_bee = visits_day, 
-                      bees_hive = hives_ha(1,
-                                           mu_pop = 1e4,
-                                           seed = 500), 
-                      hive_aggregate = T,
-                      average_diameter = F, 
-                      average_weight = F)
-Sys.time() - t
-
-t <- Sys.time()
-t_ha_HQ <- crop_yield(p_ha = p_01ha,
-                      flowers_plant = total_flowers, 
-                      visits_bee = visits_day_HQ, 
-                      bees_hive = hives_ha(5, 
-                                           mu_pop = 2e4,
-                                           seed = 500), 
-                      hive_aggregate = T,
-                      average_diameter = F, 
-                      average_weight = F)
-Sys.time() - t
-
-t_ha_LQ$production_ha %$% plot(hives, t, type = 'l', col = 'red', 
-                               xlim = c(0, 10), ylim = c(0, 20))
-t_ha_HQ$production_ha %$% lines(hives, t, type = 'l', col = 'blue')
-
-
-
-####### continuar con las figuras de los outputs
-
-
-
-
-
-pollen_deposition_LQ <- 
-  lapply(pollen_deposition_LQ, FUN = 
-           function(x) {
-             lapply(x, FUN = 
-                      function(j) {
-                        
-                        fruto <- sapply(j, FUN = 
-                                          function(k) {
-                                            if(k == 0) 0
-                                            else production_function(k)
-                                          })
-                        sum(fruto)/1e3
-                      })
-           })
-
-pollen_deposition_HQ <- 
-  lapply(pollen_deposition_HQ, FUN = 
-           function(x) {
-             lapply(x, FUN = 
-                      function(j) {
-                        
-                        fruto <- sapply(j, FUN = 
-                                          function(k) {
-                                            if(k == 0) 0
-                                            else production_function(k)
-                                          })
-                        sum(fruto)/1e3
-                      })
-           })
-
-
-pollen_deposition_HQ <- 
-  lapply(1:length(pollen_deposition_HQ), FUN = 
-           function(x) {
-             
-             t <- unlist(pollen_deposition_HQ[x], use.names = F)
-             
-             tibble(kg = t, 
-                    hive = paste(x), 
-                    quality = 'Hight')
-             
-           })
-
-pollen_deposition_LQ <- 
-  lapply(1:length(pollen_deposition_LQ), FUN = 
-           function(x) {
-             
-             t <- unlist(pollen_deposition_LQ[x], use.names = F)
-             
-             tibble(kg = t, 
-                    hive = paste(x), 
-                    quality = 'Hight')
-             
-           })
-
-pollen_deposition_LQ <- do.call('rbind', pollen_deposition_LQ)
-pollen_deposition_LQ$quality <- 'Low'
-pollen_deposition_HQ <- do.call('rbind', pollen_deposition_HQ)
-
-production <- rbind(pollen_deposition_HQ, 
-                    pollen_deposition_LQ)
-
-production$hive <- as.factor(production$hive)
-production$hive <- factor(production$hive, 
-                          levels = as.character(sort(as.numeric(levels(production$hive)))))
-
-production <- split(production, list(production$quality, 
-                                     production$hive))
-
-production$Hight.1
-
-production <- lapply(production, FUN = 
-                       function(x) {
-                         
-                         v <- vector('double', 2e3)
-                         
-                         for (i in 1:2e3) {
-                           v[[i]] <- sum(sample(x$kg, p_01ha, replace = T))
-                         }
-                         
-                         v <- v/1e3
-                         
-                         tibble(mu = mean(v), 
-                                li = quantile(v, 0.025), 
-                                ls = quantile(v, 0.975), 
-                                hive = x$hive[[1]],
-                                quality = x$quality[[1]])
-                       })
-
-production <- do.call('rbind', production)
-
-production |> 
   ggplot() +
-  geom_line(data = production[production$quality == 'Low', ], 
-            aes(hive, mu, group = 1), color = 'tan1') +
-  geom_vline(xintercept = c(4, 9, 10, 13), linetype = 2, col = 'red') +
-  geom_point(data = production[production$quality == 'Low', ], 
-             aes(hive, mu), color = 'tan1') +
-  geom_errorbar(data = production[production$quality == 'Low', ], 
-                aes(hive, mu, ymin = li, ymax = ls), width = 0, 
-                color = 'tan1') +
-  geom_line(data = production[production$quality == 'Hight', ], 
-            aes(hive, mu, group = 1), color = 'lightblue3') +
-  geom_point(data = production[production$quality == 'Hight', ], 
-             aes(hive, mu), color = 'lightblue3') +
-  geom_errorbar(data = production[production$quality == 'Hight', ], 
-                aes(hive, mu, ymin = li, ymax = ls), width = 0, 
-                color = 'lightblue3') +
-  labs(x = 'Hive density per blueberry ha', y = 'Average production per ha (t)') +
+  geom_jitter(data = sims2, 
+               aes(hives, sd_fruit_size, color = type), size = 0.1) +
+  geom_ribbon(data = sims_lims, 
+              aes(ymin = li, ymax = ls, x = hives, fill = type), 
+              alpha = 0.7) +
+  scale_fill_manual(values = c('tan1', 'lightblue')) +
+  scale_color_manual(values = c('tan1', 'lightblue')) +
+  labs(x = expression('Hive density (ha'^-1~')'), 
+       y = 'SD Fruit size per plant (mm)') +
+  lims(y = c(2.5, 6.25)) +
   theme_bw() +
-  theme(legend.position = 'top', 
-        panel.grid = element_blank())
+  theme(legend.position = 'none', 
+        panel.grid = element_blank(), 
+        text = element_text(family = 'Times New Roman'))
 
-ggsave('production_preliminary.jpg', width = 14, height = 8, 
-       units = 'cm', dpi = 700)
-
-quantile(unlist(pollen_deposition_HQ$Hive5, use.names = F))
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-optimal_model <- bf(fruto_diam ~ carga_poli + carga_poli2 + tratamiento)
-
-get_prior(optimal_model, data = pollen_fruit, family = "Gaussian")
-
-prior_optMod <- c(set_prior('normal(5, 3)', class = 'Intercept'),
-                  set_prior('normal(0, 0.2)', class = 'b', coef = 'carga_poli'),
-                  set_prior('normal(0, 0.2)', class = 'b', coef = 'carga_poli2'),
-                  set_prior('exponential(1)', class = 'sigma'))
-
-optim_model <- brm(formula = optimal_model, data = pollen_fruit, family = gaussian,
-                   prior = prior_optMod, future = T, chains = 3,
-                   thin = 3, iter = 6e3, warmup =  500, seed = 222)
-
-summary(optim_model)
-
-coefs_optim <- fixef(optim_model)
-
-a <- coefs_optim[3, 1]
-b <- coefs_optim[2, 1]
-
-(x_value <- -b/(2*a)) # function vertex
-(y_value <- (a*(x_value)^2) + (b*x_value) + coefs_optim[1, 1]) # asíntot
-
-# =====================================
-
-
-x <- seq(0,120, 1)
-#y <- 250/(1+18*exp(-1*x))
-a <- 250 # slope 
-b1 <- 0.5 # 
-y <- a*(1-exp(-b1*x))
-plot(x, y, type="l",main="Benefit and cost curve\n honeybee - blueberry interaction")
-points(7, y[x==7], col = 'red', pch = 19)
-a2 <- 150 # asymptote
-b2 <- 0.1 # slope factor
-g <- 60 # response to x a the middle point 
-y1 <- a2/(1+exp(b2*(g-x)))
-lines(x,y1,ylim=c(0,140),type="l",main="four-parameter logistic", col = 'red') #two-parameter logistic
-lines(x, y - y1 ,ylim=c(0,140),type="l",main="four-parameter logistic", 
-      col = 'red', lty = 2)
-
-
-# ====== modelo sim =====
-
-x <- seq(0,120, 1)
-#y <- 250/(1+18*exp(-1*x))
-a <- 200 # slope 
-b1 <- 0.2 # 
-y <- a*(1-exp(-b1*x))
-plot(x, y, type="l", ylim = c(0, 250),
-     main="Benefit and cost curve\n honeybee - blueberry interaction")
-points(7, y[x==7], col = 'red', pch = 19)
-a2 <- 100 # asymptote
-b2 <- 0.1 # slope factor
-g <- 60 # response to x a the middle point 
-y1 <- a2/(1+exp(b2*(g-x)))
-lines(x,y1,ylim=c(0,140),type="l",main="four-parameter logistic", col = 'red') #two-parameter logistic
-lines(x, y - y1 ,ylim=c(0,140),type="l",main="four-parameter logistic", 
-      col = 'red', lty = 2)
-
-x
-
-plot(rnbinom(length(x), size = 1, 
-             mu = a2/(1+exp(b2*(g-x)))) ~ x)
-
-pred <- rnbinom(length(x), size = 0.5, 
-                mu = a2/(1+exp(b2*(g-x))))
-
-cos_pois <- rpois(length(x), lambda = a2/(1+exp(b2*(g-x))))
-
-benef_pois <- rpois(length(x), lambda = a*(1-exp(-b1*x)))
-
-plot(benef_pois ~ x)
-points(cos_pois ~ x, col = 'red')
-points((benef_pois - cos_pois) ~ x, col = 'green')
-
-
-cos_NB <- rnbinom(length(x), size = 0.5, 
-                mu = a2/(1+exp(b2*(g-x))))
-
-benef_NB <- rnbinom(length(x), mu = a*(1-exp(-b1*x)),
-                    size = 0.5)
-
-plot(benef_NB ~ x)
-points(cos_NB ~ x, col = 'red')
-points((benef_NB-cos_NB) ~ x, col = 'green')
-
-
-# ========== Modelo tasa de visitas =======
-
-
-
-
-
+ggsave('hive_ha.jpg', width = 12, height = 8, 
+         units = 'cm', dpi = 700)
 
 
 
