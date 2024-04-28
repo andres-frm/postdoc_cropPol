@@ -1068,7 +1068,7 @@ vis_hives |>
   geom_line(alpha = 0.3) + #geom_ribbon(alpha = 0.2) +
   labs(x = 'Hives per blueberry ha', 
        y = 'Average flower visits per flower\n at crop level') +
-  scale_shape_manual(values = rep(1, 100)) +
+  scale_shape_manual(values = rep(1, 1000)) +
   scale_color_manual(values = c('lightblue3', 'tan1')) +
   theme_bw() +
   theme(legend.position = 'none', 
