@@ -2916,18 +2916,6 @@ ggplot() +
 ggsave('production_ha.jpg', width = 10, height = 8, 
        units = 'cm', dpi = 700)
 
-knee_hq_boot <- sapply(1:2e3, FUN = 
-                         function(x) {
-                           mean(sample(knee_hq$x, length(knee_hq$x), replace = T))
-                         })
-
-knee_lq_boot <- sapply(1:2e3, FUN = 
-                         function(x) {
-                           mean(sample(knee_lq$x, length(knee_hq$x), replace = T))
-                         })
-
-knee_lims <- tibble(lq = c(min(knee_lq_boot), max(knee_lq_boot)), 
-                    hq = c(min(knee_hq_boot), max(knee_hq_boot)))
 
 ggplot() +
   geom_line(data = sims, aes(hives, t, linetype = sim, color = type), 
@@ -2940,6 +2928,7 @@ ggplot() +
   geom_point(data = knee_hq, aes(x, y), color = 'tan1', 
              shape = 3, 
              size = 0.2) +
+  scale_x_continuous(breaks = seq(1, 20, by = 2)) +
   theme_bw() +
   labs(y = expression('Production'~'(t ha'^-1~')'), 
        x = expression('Hive density (ha'^-1~')')) +
@@ -2948,6 +2937,33 @@ ggplot() +
         text = element_text(family = 'Times New Roman'))
 
 ggsave('production_ha2.jpg', width = 10, height = 8, 
+       units = 'cm', dpi = 700)
+
+
+ggplot() +
+  geom_line(data = sims, aes(hives, t, linetype = sim, color = type), 
+            linewidth = 0.08, alpha = 0.25) +
+  scale_color_manual(values = c('tan1', 'lightblue')) +
+  scale_linetype_manual(values = rep(1, 500)) +
+  geom_point(data = knee_lq, aes(x, y), color = 'lightblue', 
+             shape = 1, 
+             size = 0.2) +
+  geom_point(data = knee_hq, aes(x, y), color = 'tan1', 
+             shape = 3, 
+             size = 0.2) +
+  geom_vline(xintercept = c(quantile(knee_lq$x, c(0.025, 0.975))), 
+             linetype = c(2, 2), color = 'lightblue', linewidth = 0.25) +
+  geom_vline(xintercept = c(quantile(knee_hq$x, c(0.025, 0.975))), 
+             linetype = c(2, 2), color = 'tan1', linewidth = 0.25) +
+  scale_x_continuous(breaks = seq(1, 20, by = 2)) +
+  theme_bw() +
+  labs(y = expression('Production'~'(t ha'^-1~')'), 
+       x = expression('Hive density (ha'^-1~')')) +
+  theme(legend.position = 'none', 
+        panel.grid = element_blank(), 
+        text = element_text(family = 'Times New Roman'))
+
+ggsave('production_ha3.jpg', width = 10, height = 8, 
        units = 'cm', dpi = 700)
 
 knee_hq$type <- 'High quality'
@@ -3016,22 +3032,185 @@ sims_lims <-
 
   ggplot() +
   geom_jitter(data = sims2, 
-               aes(hives, sd_fruit_size, color = type), size = 0.1) +
+               aes(hives, sd_fruit_size, color = type), size = 0.025) +
   geom_ribbon(data = sims_lims, 
               aes(ymin = li, ymax = ls, x = hives, fill = type), 
-              alpha = 0.7) +
+              alpha = 0.5) +
   scale_fill_manual(values = c('tan1', 'lightblue')) +
   scale_color_manual(values = c('tan1', 'lightblue')) +
+  # geom_vline(xintercept = c(quantile(knee_lq$x, c(0.025, 0.975))), 
+  #              linetype = c(2, 2), color = 'lightblue', linewidth = 0.5) +
+  # geom_vline(xintercept = c(quantile(knee_hq$x, c(0.025, 0.975))), 
+  #              linetype = c(2, 2), color = 'tan1', linewidth = 0.5) +
   labs(x = expression('Hive density (ha'^-1~')'), 
        y = 'SD Fruit size per plant (mm)') +
-  lims(y = c(2.5, 6.25)) +
+  lims(y = c(2.6, 6.25)) +
   theme_bw() +
   theme(legend.position = 'none', 
         panel.grid = element_blank(), 
         text = element_text(family = 'Times New Roman'))
 
-ggsave('hive_ha.jpg', width = 12, height = 8, 
+ggsave('fruit_sd_ha.jpg', width = 12, height = 8, 
          units = 'cm', dpi = 700)
+
+knee$x_r <- round(knee$x)
+
+# ================== 9. Costs ================
+
+# gesling et al. 2017
+
+knee$geslin_price <- ifelse(knee$type == 'High quality', 
+                            20, 5)
+knee$beeflow <- ifelse(knee$type == 'High quality', 
+                       2400/10, 123.29/10)
+
+knee$cost_geslin <- knee$x * knee$geslin_price
+knee$cost_beeflow <- knee$x * knee$beeflow
+
+gains_ha <- 
+  lapply(sims$t, FUN = 
+           function(x) {
+             prod <- x * 1000
+             tibble(export = (prod * 0.8) * 5.16,
+                    fresh = (prod*0.12) * 5.33, 
+                    second = (prod*0.08) * 3,
+                    costo = prod * 0.82,
+                    tot = (export + fresh + second)-costo)
+           })
+
+gains_ha <- do.call('rbind', gains_ha)
+
+economic_gains <- 
+  as_tibble(cbind(sims, gains_ha[, "tot"]))
+
+hq_gains <- 
+  do.call('rbind', 
+          lapply(unique(knee[knee$type == 'High quality', ]$x_r), 
+                 FUN = 
+                   function(x) {
+                     t <- economic_gains[which(x == economic_gains$hives), ]
+                     t[t$t >= quantile(t$t, 0.025) &
+                         t$t <= quantile(t$t, 0.975), ]
+                   }))
+
+lq_gains <- 
+  do.call('rbind', 
+          lapply(unique(knee[knee$type == 'Low quality', ]$x_r), 
+                 FUN = 
+                   function(x) {
+                     t <- economic_gains[which(x == economic_gains$hives), ]
+                     t[t$t >= quantile(t$t, 0.025) &
+                         t$t <= quantile(t$t, 0.975), ]
+                   }))
+
+
+economic_gains <- 
+  rbind(lq_gains, hq_gains)
+
+economic_gains$geslin_price <- 
+  ifelse(economic_gains$type == 'LQ', 5, 20)
+
+economic_gains$beeflow <- ifelse(economic_gains$type == 'LQ', 
+                                 123.29/10, 2400/10)
+economic_gains <- 
+  gather(economic_gains, 'price_type', 'dolars', 
+       -colnames(economic_gains)[1:5])
+
+economic_gains$net_income <- 
+  economic_gains$tot - (economic_gains$hives * economic_gains$dolars)
+
+economic_gains$price_type <- 
+  ifelse(economic_gains$price_type == 'beeflow', 
+         'Cavigliasso & Benito-Amaro\n   (not published)', 
+         'Geslin et al. 2017')
+
+economic_gains$type <- 
+  ifelse(economic_gains$type == 'LQ', 
+         'Low quality', 'High quality')
+
+economic_gains |> 
+  ggplot(aes(net_income, color = type, fill = type)) +
+  geom_density(aes(y = after_stat(scaled)), alpha = 0.5) +
+  scale_color_manual(values = c('tan1', 'lightblue')) +
+  scale_fill_manual(values = c('tan1', 'lightblue')) +
+  labs(x = expression('Net income (US$ ha'^-1~')'), y = 'Density') +
+  facet_wrap(~ price_type) +
+  theme_bw() +
+  theme(legend.position = 'none', 
+        panel.grid = element_blank(), 
+        text = element_text(family = 'Times New Roman'))
+
+
+economic_gains |> 
+  ggplot(aes(type, net_income, color = type, fill = type)) +
+  geom_violin(alpha = 0.5) +
+  scale_color_manual(values = c('tan1', 'lightblue')) +
+  scale_fill_manual(values = c('tan1', 'lightblue')) +
+  stat_summary(fun = 'median', geom = 'point', 
+               color = 'tomato3', size = 3) +
+  labs(y = expression('Net income (US$ ha'^-1~')'), x = NULL) +
+  facet_wrap(~ price_type) +
+  theme_bw() +
+  theme(legend.position = 'none', 
+        panel.grid = element_blank(), 
+        text = element_text(family = 'Times New Roman'))
+
+ggsave('net_income.jpg', width = 15, height = 8, units = 'cm', dpi = 700)
+
+economic_gains <- split(economic_gains, list(economic_gains$type, economic_gains$price_type))
+
+diff_economic_cavigliasso <- 
+  sapply(1:1e3, FUN = 
+           function(i) {
+             sapply(1:2e3, FUN = 
+                      function(x) {
+                        hq <- sample(economic_gains[[1]]$net_income, 1)
+                        lq <- sample(economic_gains[[2]]$net_income, 1)
+                        hq-lq
+                      })
+           })
+
+diff_economic_gesling <- 
+  sapply(1:1e3, FUN = 
+           function(i) {
+             sapply(1:2e3, FUN = 
+                           function(x) {
+                             hq <- sample(economic_gains[[3]]$net_income, 1)
+                             lq <- sample(economic_gains[[4]]$net_income, 1)
+                             hq-lq
+                           })
+           })
+
+jpeg('net_income2.jpeg', width = 20, height = 8, units = 'cm', res = 700)
+
+par(mfrow = c(1, 2), mar = c(4, 4, 2, 0))
+
+plot(density(diff_economic_cavigliasso[, 1]), 
+     main = 'Cavigliasso & Benito-Amaro\n   (not published)', 
+     ylab = 'Density', 
+     xlab = expression('Net income difference (US$ ha'^-1~')'), 
+     cex.main = 0.8)
+for (i in 1:500) lines(density(diff_economic_cavigliasso[, i]), 
+                       lwd = 0.1)
+abline(v = mean(apply(diff_economic_cavigliasso, 2, mean)), 
+       lty = 3, col = 'red')
+neg <- round(mean(apply(diff_economic_cavigliasso, 2, function(x) mean(x<0))), 2)
+text(paste(neg, '%'), x = -30000, y = 0.000035)
+
+plot(density(diff_economic_gesling[, 1]), 
+     main = 'Geslin et al. 2017', 
+     ylab = '', 
+     xlab = expression('Net income difference (US$ ha'^-1~')'), 
+     cex.main = 1)
+for (i in 1:500) lines(density(diff_economic_gesling[, i]), 
+                       lwd = 0.1)
+abline(v = mean(apply(diff_economic_gesling, 2, mean)), 
+       lty = 3, col = 'red')
+neg2 <- round(mean(apply(diff_economic_gesling, 2, function(x) mean(x<0))), 2)
+text(paste(neg2, '%'), x = -30000, y = 0.00003)
+
+dev.off()
+
 
 
 
