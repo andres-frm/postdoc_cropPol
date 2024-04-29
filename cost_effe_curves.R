@@ -93,8 +93,28 @@ hives_ha <- function(n_hives = 25, # n hives to be simulated
   return(foragers_bees)
 }
 
-hives_ha(1, seed = rpois(1, 100))
+jpeg('bees_hive.jpeg', width = 20, height = 10, units = 'cm', res = 700)
+par(mfrow = c(1, 2), mar = c(4.2, 4.2, 1, 1))
 
+plot(density(rnbinom(1e3, mu = 10e3, size = 10)), main = '', 
+     xlab = 'Bees per hive', lwd = 2, col = 'lightblue', 
+     xlim = c(3000, 40000))
+lines(density(rnbinom(1e3, mu = 20e3, size = 10)), lwd = 2, 
+      col = 'tan1')
+
+plot(density(rbeta(2e3, 2.5, 8)), lwd = 2, main = '', 
+     xlab = 'Proportion of foragers', ylab = '')
+
+dev.off()
+
+jpeg('foraging_pattern.jpeg', width = 20, height = 12, units = 'cm', res = 700)
+par(mar = c(4.2, 4.2, 1, 1))
+
+plot(density(hives_ha(1e3, mu_pop = 10e3)), main = '', 
+     xlab = 'Foragers per hive', lwd = 2, col = 'lightblue')
+lines(density(hives_ha(1e3, mu_pop = 20e3)), lwd = 2, 
+     col = 'tan1')
+dev.off()
 # ============ Foraging pattern ========
 
 trip_frequency_HQ <- rnorm(5e4, 
@@ -123,6 +143,7 @@ trips_bee_LQ <- trip_frequency_LQ * ((8*60)/90) # number of trips per day
 foraging_time_LQ <- trip_span_LQ * trips_bee_LQ # foraging time in seconds
 
 
+jpeg('foraging_pattern.jpeg', width = 20, height = 12, units = 'cm', res = 700)
 par(mfrow = c(2, 2), mar = c(4.2, 4.2, 1, 1))
 
 plot(density(trip_frequency_HQ), col = 'gold3', main = '', ylim = c(0, 5.5),
@@ -136,7 +157,7 @@ lines(density(trip_span_LQ/60), main = '', col = 'cyan4',
       xlab = 'Trip span (min)', lwd = 2)
 
 plot(density(trips_bee_HQ), main = '', col = 'gold3',
-     xlab = 'Daily trip per bee', lwd = 2, ylim = c(0, 1))
+     xlab = 'Daily trips per bee', lwd = 2, ylim = c(0, 1))
 lines(density(trips_bee_LQ), main = '', col = 'cyan4',
       xlab = 'Daily trip per bee (min)', lwd = 2)
 
@@ -144,8 +165,7 @@ plot(density((foraging_time_HQ/60)/60), col = 'gold3', main = '', ylim = c(0, 1.
      xlab = 'Daily foraging time per bee (h)', lwd = 2, xlim = c(1, 6.5))
 lines(density((foraging_time_LQ/60)/60), main = '', col = 'cyan4',
       xlab = 'Daily foraging time per bee (h)', lwd = 2)
-
-par(mfrow = c(1, 1))
+dev.off()
 
 #(feral_pop <- (quantile(1:sum(beehive_strength), 0.1)))
 
@@ -730,9 +750,18 @@ total_flowers <- round(total_flowers)
 
 lines(density(total_fruts), col = 'red')
 
+jpeg('flowers_plant.jpeg', units = 'cm', width = 20, height = 10, 
+     res = 500)
+par(mfrow = c(1, 2), mar = c(4, 4, 0.5, 0.5))
 plot(density(total_flowers), main = '', 
      xlab = 'Flowers per blueberry bush', xlim = c(0, 20e3), 
      lwd = 4, col = 'lightblue') 
+plot(density(rbeta(2e3, 6, 4)), 
+     xlab = 'Flowering proportion', ylab = '',
+     lwd = 4, col = 'lightblue', main = '')
+
+dev.off()
+
 
 
 # ================== 4. Plants ha ======
@@ -740,6 +769,7 @@ plot(density(total_flowers), main = '',
 
 p_01ha <- round((1501* # plantas of emerald in per ha (2011 in Citromax)
                    1)/0.45)
+
 
 
 # =============== Simulating honeybee visits ========
@@ -1526,12 +1556,16 @@ mu_asintota <- 250
 asymptote <- rnorm(length(post_svp_slope$beta), mu_asintota, 15)
 slope <- post_svp_slope$beta
 
+jpeg('bee_pollen_deposition.jpeg', units = 'cm', 
+     width = 10, height = 8, res = 700)
+par(mar = c(4, 4, 1, 1))
 plot(NULL, xlim = c(0, 30), ylim = c(0, 320), xlab = 'Honeybee visits', 
-     ylab = 'Single visit pollen deposition')
+     ylab = 'Stigmatic pollen deposition')
 for (i in 1:200) curve(asymptote[i]*(1-exp(-slope[i]*x)), 
                        add = T, lwd = 0.1)
 curve(mean(asymptote)*(1-exp(-mean(slope)*x)), 
       add = T, lwd = 2, col = 'red')
+dev.off()
 
 pollen_deposition_fun <- function(x, 
                                   mu_est = T, 
@@ -2235,28 +2269,26 @@ post_functions <-
 z_x <- dat_pollen_fun %$% seq(min(carga_poli), max(carga_poli), 
                               length.out = 1e3)
 
-par(mfrow = c(2, 2))
-for (i in 1:4) {
-  
-  plot((mean(post_functions[[i]][, 1, drop = T])) /
-         (1 + exp(-(mean(post_functions[[i]][, 2, drop = T]) +
-                    mean(post_functions[[i]][, 3, drop = T]) * z_x))) ~ z_x, 
-       lwd = 0.1, type = 'l', xlim = c(0, 400), 
-       ylim = c(0, 20), xlab = 'Pollen deposition (z-scores)', 
-       ylab = paste('Fruit diameter', names(post_functions)[i]), col = i)
-  
-  for (j in 1:100) {
-    post_functions$sch %$% 
-      lines(post_functions[[i]][, 1, drop = T][[j]] /
-              (1 + exp(-(post_functions[[i]][, 2, drop = T][[j]] +
-                         post_functions[[i]][, 3, drop = T][[j]] * z_x))) ~ z_x, 
-            lwd = 0.1, type = 'l', col = i)
-  }
-  
-  points(dat_pollen_fun$carga_poli, dat_pollen_fun[[i+1]], lwd = 2)
-  
+jpeg('pollen_fruit.jpeg', width = 10, height = 8, units = 'cm', 
+     res = 700)
+par(mar = c(4, 4, 1, 1))
+plot((mean(post_functions$sch[, 1, drop = T])) /
+       (1 + exp(-(mean(post_functions$sch[, 2, drop = T]) +
+                    mean(post_functions$sch[, 3, drop = T]) * z_x))) ~ z_x, 
+     lwd = 0.1, type = 'l', xlim = c(0, 400), 
+     ylim = c(0, 20), xlab = 'Pollen deposition', 
+     ylab = paste('Fruit diameter (mm)'), col = i)
+
+for (j in 1:100) {
+  lines(post_functions$sch[, 1, drop = T][[j]] /
+          (1 + exp(-(post_functions$sch[, 2, drop = T][[j]] +
+                       post_functions$sch[, 3, drop = T][[j]] * z_x))) ~ z_x, 
+        lwd = 0.1, type = 'l', col = i)
 }
 
+points(dat_pollen_fun$carga_poli, dat_pollen_fun$fruit_sch, lwd = 2, 
+       cex = 0.3)
+dev.off()
 par(mfrow = c(1, 1))
 
 plot_functions <- 
@@ -2602,11 +2634,15 @@ par(mfrow = c(1, 1))
 
 xx <- sample(0:20, 10e3, T)
 
-par(mfrow = c(1, 2), mar = c(4.2, 4.2, 2.5, 1))
+jpeg('fruit_size_weigth.jpg', width = 10, height = 8, units = 'cm', res = 700)
+par(mfrow = c(1, 1), mar = c(4.2, 4.2, 1, 1))
 plot(xx, predict_weight(xx, mu_est = F), 
      xlab = 'Fruit diameter (mm)', 
      ylab = 'Predicted weight (g)', 
-     main = expression('Incluring'~sigma~'parameter'))
+     main = '', 
+     cex = 0.5)
+dev.off()
+
 plot(xx, predict_weight(xx, mu_est = T), 
      xlab = 'Fruit diameter (mm)', 
      ylab = 'Predicted weight (g)', 
@@ -2987,6 +3023,24 @@ knee |>
 ggsave('hive_ha.jpg', width = 10, height = 8, 
        units = 'cm', dpi = 700)
 
+
+knee |> 
+  ggplot(aes(type, y, color = type, fill = type)) +
+  geom_boxplot(alpha = 0.5, width = 0.4, outlier.alpha = 0) +
+  scale_y_continuous(breaks = seq(1, 20, by = 2)) +
+  geom_jitter(aes(type, y), width = 0.1, alpha = 0.5, size = 0.5) +
+  scale_color_manual(values = c('tan1', 'lightblue')) +
+  scale_fill_manual(values = c('tan1', 'lightblue')) +
+  labs(y = expression('Production (t ha'^-1~')'), x = NULL) +
+  theme_bw() +
+  theme(legend.position = 'none', 
+        panel.grid = element_blank(), 
+        text = element_text(family = 'Times New Roman'))
+
+ggsave('t_ha.jpg', width = 10, height = 8, 
+       units = 'cm', dpi = 700)
+
+
  
 sims_lq2 <- lapply(t_ha_LQ, FUN = 
                     function(x) {
@@ -3064,11 +3118,11 @@ knee$geslin_price <- ifelse(knee$type == 'High quality',
 knee$beeflow <- ifelse(knee$type == 'High quality', 
                        2400/10, 123.29/10)
 
-knee$cost_geslin <- knee$x * knee$geslin_price
-knee$cost_beeflow <- knee$x * knee$beeflow
+knee$cost_geslin <- knee$x_r * knee$geslin_price
+knee$cost_beeflow <- knee$x_r * knee$beeflow
 
 gains_ha <- 
-  lapply(sims$t, FUN = 
+  lapply(knee$y, FUN = 
            function(x) {
              prod <- x * 1000
              tibble(export = (prod * 0.8) * 5.16,
@@ -3081,52 +3135,55 @@ gains_ha <-
 gains_ha <- do.call('rbind', gains_ha)
 
 economic_gains <- 
-  as_tibble(cbind(sims, gains_ha[, "tot"]))
-
-hq_gains <- 
-  do.call('rbind', 
-          lapply(unique(knee[knee$type == 'High quality', ]$x_r), 
-                 FUN = 
-                   function(x) {
-                     t <- economic_gains[which(x == economic_gains$hives), ]
-                     t[t$t >= quantile(t$t, 0.025) &
-                         t$t <= quantile(t$t, 0.975), ]
-                   }))
-
-lq_gains <- 
-  do.call('rbind', 
-          lapply(unique(knee[knee$type == 'Low quality', ]$x_r), 
-                 FUN = 
-                   function(x) {
-                     t <- economic_gains[which(x == economic_gains$hives), ]
-                     t[t$t >= quantile(t$t, 0.025) &
-                         t$t <= quantile(t$t, 0.975), ]
-                   }))
-
-
-economic_gains <- 
-  rbind(lq_gains, hq_gains)
-
-economic_gains$geslin_price <- 
-  ifelse(economic_gains$type == 'LQ', 5, 20)
-
-economic_gains$beeflow <- ifelse(economic_gains$type == 'LQ', 
-                                 123.29/10, 2400/10)
+  as_tibble(cbind(knee, gains_ha[, "tot"]))
+# 
+# hq_gains <- 
+#   do.call('rbind', 
+#           lapply(unique(knee[knee$type == 'High quality', ]$x_r), 
+#                  FUN = 
+#                    function(x) {
+#                      t <- economic_gains[which(x == economic_gains$hives), ]
+#                      t[t$t >= quantile(t$t, 0.025) &
+#                          t$t <= quantile(t$t, 0.975), ]
+#                    }))
+# 
+# hq_gains <- hq_gains[hq_gains$type == 'HQ', ]
+# 
+# lq_gains <- 
+#   do.call('rbind', 
+#           lapply(unique(knee[knee$type == 'Low quality', ]$x_r), 
+#                  FUN = 
+#                    function(x) {
+#                      t <- economic_gains[which(x == economic_gains$hives), ]
+#                      t[t$t >= quantile(t$t, 0.025) &
+#                          t$t <= quantile(t$t, 0.975), ]
+#                    }))
+# 
+# lq_gains <- lq_gains[lq_gains$type == 'LQ', ]
+# 
+# economic_gains <- 
+#   rbind(lq_gains, hq_gains)
+# 
+# economic_gains$geslin_price <- 
+#   ifelse(economic_gains$type == 'LQ', 5, 20)
+# 
+# economic_gains$beeflow <- ifelse(economic_gains$type == 'LQ', 
+#                                  123.29/10, 2400/10)
 economic_gains <- 
   gather(economic_gains, 'price_type', 'dolars', 
-       -colnames(economic_gains)[1:5])
+       -colnames(economic_gains)[c(1:6, 9)])
 
 economic_gains$net_income <- 
-  economic_gains$tot - (economic_gains$hives * economic_gains$dolars)
+  economic_gains$tot - economic_gains$dolars
 
 economic_gains$price_type <- 
-  ifelse(economic_gains$price_type == 'beeflow', 
+  ifelse(economic_gains$price_type == 'cost_beeflow', 
          'Cavigliasso & Benito-Amaro\n   (not published)', 
          'Geslin et al. 2017')
 
-economic_gains$type <- 
-  ifelse(economic_gains$type == 'LQ', 
-         'Low quality', 'High quality')
+# economic_gains$type <- 
+#   ifelse(economic_gains$type == 'LQ', 
+#          'Low quality', 'High quality')
 
 economic_gains |> 
   ggplot(aes(net_income, color = type, fill = type)) +
@@ -3143,7 +3200,8 @@ economic_gains |>
 
 economic_gains |> 
   ggplot(aes(type, net_income, color = type, fill = type)) +
-  geom_violin(alpha = 0.5) +
+  geom_boxplot(alpha = 0.5, outlier.alpha = 0, width = 0.5) +
+  geom_jitter(width = 0.1, size = 0.1, alpha = 0.3) +
   scale_color_manual(values = c('tan1', 'lightblue')) +
   scale_fill_manual(values = c('tan1', 'lightblue')) +
   stat_summary(fun = 'median', geom = 'point', 
@@ -3192,10 +3250,10 @@ plot(density(diff_economic_cavigliasso[, 1]),
      cex.main = 0.8)
 for (i in 1:500) lines(density(diff_economic_cavigliasso[, i]), 
                        lwd = 0.1)
-abline(v = mean(apply(diff_economic_cavigliasso, 2, mean)), 
-       lty = 3, col = 'red')
+abline(v = c(0, mean(apply(diff_economic_cavigliasso, 2, mean))), 
+       lty = c(1, 3), col = 'red')
 neg <- round(mean(apply(diff_economic_cavigliasso, 2, function(x) mean(x<0))), 2)
-text(paste(neg, '%'), x = -30000, y = 0.000035)
+text(paste(neg*100, '%'), x = 8000, y = 0.0002)
 
 plot(density(diff_economic_gesling[, 1]), 
      main = 'Geslin et al. 2017', 
@@ -3204,13 +3262,36 @@ plot(density(diff_economic_gesling[, 1]),
      cex.main = 1)
 for (i in 1:500) lines(density(diff_economic_gesling[, i]), 
                        lwd = 0.1)
-abline(v = mean(apply(diff_economic_gesling, 2, mean)), 
-       lty = 3, col = 'red')
+abline(v = c(0, mean(apply(diff_economic_gesling, 2, mean))), 
+       lty = c(1, 3), col = 'red')
 neg2 <- round(mean(apply(diff_economic_gesling, 2, function(x) mean(x<0))), 2)
-text(paste(neg2, '%'), x = -30000, y = 0.00003)
+text(paste(neg2*100, '%'), x = 8000, y = 0.0002)
 
 dev.off()
 
+sims_lq |> 
+  ggplot(aes(as.factor(hives), t)) +
+  geom_boxplot(alpha = 0.5, outlier.alpha = 0, width = 0.5, 
+               color = 'lightblue', fill = 'lightblue') +
+  geom_jitter(width = 0.1, size = 0.1, alpha = 0.3, color = 'lightblue') +
+  # stat_summary(fun = 'median', geom = 'point', 
+  #              color = 'tomato3', size = 1) +
+  geom_hline(yintercept = quantile(knee_hq$y, c(0.025, 0.975)), 
+             linetype = c(2, 2), col = 'tan1') +
+  labs(y = expression('Production (t ha'^-1~')'), x = NULL) +
+  annotate(geom = 'text', label = 'High quality hives', x = 3, y = 12.4, 
+           family = 'Times New Roman') +
+  annotate(geom = 'text', 
+           label = 'Average hive density\n used by Entre Rios farmers', 
+           x = 16.5, y = 5, 
+           family = 'Times New Roman') +
+  geom_vline(xintercept = c(12, 13), linetype = c(2, 1), color = 'red') +
+  theme_bw() +
+  theme(legend.position = 'none', 
+        panel.grid = element_blank(), 
+        text = element_text(family = 'Times New Roman'))
+
+ggsave('production_2.jpg', width = 15, height = 10, units = 'cm', dpi = 700)
 
 
 
