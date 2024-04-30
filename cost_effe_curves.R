@@ -3027,6 +3027,29 @@ ggsave('hive_ha.jpg', width = 10, height = 8,
        units = 'cm', dpi = 700)
 
 
+jpeg('contrast_hives.jpeg', width = 12, height = 10, 
+     units = 'cm', res = 500)
+par(mar = c(4, 4, 0.5, 0.5))
+plot(density(sample(knee[knee$type == 'Low quality', ]$x, 4e3, T) -
+               sample(knee[knee$type == 'High quality', ]$x, 4e3, T)), 
+     main = '', xlab = 'N diff. high quality hives (t)', 
+     col = 'tomato', lwd = 3)
+text(round(mean(sample(knee[knee$type == 'Low quality', ]$x, 4e3, T) -
+                  sample(knee[knee$type == 'High quality', ]$x, 4e3, T)), 2),
+     x = 4.5, y = 0.1)
+dev.off()
+
+jpeg('contrast_hives2.jpeg', width = 12, height = 10, 
+     units = 'cm', res = 500)
+par(mar = c(4, 4, 0.5, 0.5))
+plot(density(12 / sample(knee[knee$type == 'High quality', ]$x, 4e3, T)), 
+     main = '', xlab = 'diff. high quality hives (t)', 
+     col = 'tomato', lwd = 3)
+text(round(mean(12/sample(knee[knee$type == 'High quality', ]$x, 4e3, T)), 2),
+     x = 3.5, y = 0.2)
+dev.off()
+
+
 knee |> 
   ggplot(aes(type, y, color = type, fill = type)) +
   geom_boxplot(alpha = 0.5, width = 0.4, outlier.alpha = 0) +
@@ -3043,7 +3066,17 @@ knee |>
 ggsave('t_ha.jpg', width = 10, height = 8, 
        units = 'cm', dpi = 700)
 
-
+jpeg('contrast_production.jpeg', width = 12, height = 10, 
+     units = 'cm', res = 500)
+par(mar = c(4, 4, 0.5, 0.5))
+plot(density(sample(knee[knee$type == 'High quality', ]$y, 4e3, T) -
+               sample(knee[knee$type == 'Low quality', ]$y, 4e3, T)), 
+     main = '', xlab = 'Production diff. high quality hives (t)', 
+     col = 'tomato', lwd = 3)
+text(round(mean(sample(knee[knee$type == 'High quality', ]$y, 4e3, T) -
+                  sample(knee[knee$type == 'Low quality', ]$y, 4e3, T)), 2),
+     x = 0.75, y = 0.5)
+dev.off()
  
 sims_lq2 <- lapply(t_ha_LQ, FUN = 
                     function(x) {
@@ -3136,6 +3169,26 @@ gains_ha <-
            })
 
 gains_ha <- do.call('rbind', gains_ha)
+
+new_knee <- sims[sims$type == 'LQ' &
+                   sims$hives == 13, ]
+
+gains2 <- lapply(new_knee$t, FUN = 
+                   function(x) {
+                     prod <- x * 1000
+                     tibble(export = (prod * 0.8) * 5.16,
+                            fresh = (prod*0.12) * 5.33, 
+                            second = (prod*0.08) * 3,
+                            costo = prod * 0.82,
+                            tot = (export + fresh + second)-costo)
+                   })
+
+gains2 <- do.call('rbind', gains2)
+
+economic_gains2 <- 
+  as_tibble(cbind(new_knee, gains2[, "tot"]))
+
+economic_gains2$net_gain <- economic_gains2$tot - (12*5)
 
 economic_gains <- 
   as_tibble(cbind(knee, gains_ha[, "tot"]))
@@ -3299,3 +3352,32 @@ ggsave('production_2.jpg', width = 15, height = 10, units = 'cm', dpi = 700)
 
 mean(12/knee[knee$type == 'High quality', ]$x_r)
 plot(density(12/knee[knee$type == 'High quality', ]$x_r))
+
+
+
+economic_gains <- do.call('rbind', economic_gains)
+
+priceHQ <- sample(economic_gains[economic_gains$type == 'High quality',]$net_income, 
+                  4e3, T)
+priceLQ <- sample(economic_gains2$net_gain, 4e3, T)
+
+tibble(y = c(priceHQ, priceLQ), 
+       x = rep(c('HQ', 'LQ'), each = 4e3)) |> 
+  ggplot(aes(x, y, color = x, fill = x)) +
+  geom_boxplot(alpha = 0.5, outlier.alpha = 0, width = 0.5) +
+  scale_color_manual(values = c('tan1', 'lightblue')) +
+  scale_fill_manual(values = c('tan1', 'lightblue')) +
+  stat_summary(fun = 'median', geom = 'point', 
+               color = 'tomato3', size = 3) +
+  labs(y = expression('Net income (US$ ha'^-1~')'), x = NULL) +
+  theme_bw() +
+  theme(legend.position = 'none', 
+        panel.grid = element_blank(), 
+        text = element_text(family = 'Times New Roman'))
+
+plot(density(priceHQ - priceLQ))
+
+
+
+
+
