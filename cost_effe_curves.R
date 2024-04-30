@@ -265,8 +265,11 @@ lines(density(visit_span), col = 'red', lwd = 2)
 
 time_visit_honeybee <- as.vector(ppcheck_visit_honeybee)
 
-plot(density(time_visit_honeybee), col = 'tan1', lwd = 3)
-
+jpeg('time_floral_visit.jpeg', width = 10, height = 8, units = 'cm', res = 700)
+par(mar = c(4, 4, 1, 1))
+plot(density(time_visit_honeybee), col = 'tan1', lwd = 3, 
+     main = '', xlab = 'Time span of floral visit (s)')
+dev.off()
 # ======== foraging trip per day ======
 
 # function to estimate the number of foraging trip per individual i in 
@@ -1812,7 +1815,7 @@ plot_vis_hive <-
   labs(x = expression('Hives ha'^-1), 
        y = 'Average flower visits per flower\n at crop level') +
   scale_shape_manual(values = rep(1, 1000)) +
-  scale_color_manual(values = c('lightblue3', 'tan1')) +
+  scale_color_manual(values = c('tan1', 'lightblue3')) +
   theme_bw() +
   theme(legend.position = 'none', 
         panel.grid = element_blank(), 
@@ -1826,7 +1829,7 @@ plot_pollen_hive <-
   labs(x = expression('Hives ha'^-1), 
        y = 'Average pollen deposition per flower\n at crop level') +
   scale_shape_manual(values = rep(1, 1000)) +
-  scale_color_manual(values = c('lightblue3', 'tan1')) +
+  scale_color_manual(values = c('tan1', 'lightblue3')) +
   geom_hline(yintercept = c(112, 274), linetype = 2, color = 'red') +
   theme_bw() +
   theme(legend.position = 'none', 
@@ -3027,7 +3030,7 @@ ggsave('hive_ha.jpg', width = 10, height = 8,
 knee |> 
   ggplot(aes(type, y, color = type, fill = type)) +
   geom_boxplot(alpha = 0.5, width = 0.4, outlier.alpha = 0) +
-  scale_y_continuous(breaks = seq(1, 20, by = 2)) +
+  scale_y_continuous(breaks = seq(1, 14, by = 1)) +
   geom_jitter(aes(type, y), width = 0.1, alpha = 0.5, size = 0.5) +
   scale_color_manual(values = c('tan1', 'lightblue')) +
   scale_fill_manual(values = c('tan1', 'lightblue')) +
@@ -3199,6 +3202,7 @@ economic_gains |>
 
 
 economic_gains |> 
+  dplyr::filter(price_type == 'Geslin et al. 2017') |> 
   ggplot(aes(type, net_income, color = type, fill = type)) +
   geom_boxplot(alpha = 0.5, outlier.alpha = 0, width = 0.5) +
   geom_jitter(width = 0.1, size = 0.1, alpha = 0.3) +
@@ -3213,7 +3217,7 @@ economic_gains |>
         panel.grid = element_blank(), 
         text = element_text(family = 'Times New Roman'))
 
-ggsave('net_income.jpg', width = 15, height = 8, units = 'cm', dpi = 700)
+ggsave('net_income.jpg', width = 10, height = 8, units = 'cm', dpi = 700)
 
 economic_gains <- split(economic_gains, list(economic_gains$type, economic_gains$price_type))
 
@@ -3293,5 +3297,5 @@ sims_lq |>
 
 ggsave('production_2.jpg', width = 15, height = 10, units = 'cm', dpi = 700)
 
-
-
+mean(12/knee[knee$type == 'High quality', ]$x_r)
+plot(density(12/knee[knee$type == 'High quality', ]$x_r))
