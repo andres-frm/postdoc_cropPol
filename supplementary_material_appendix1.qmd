@@ -1,0 +1,291 @@
+---
+title: "How much is enough? Optimizing beehive stocking densities to maximize the production of a pollinator-dependent crop"
+subtitle: 'Appendix S1. Journal: Ecological Applications'
+author: "Andrés F. Ramírez-Mejía"
+format: 
+  html:
+    theme: 
+      light: journal
+      dark: [journal, theme-dark.scss]
+    toc: true
+    toc-depth: 10
+    toc-expand: 10
+    toc-title: "Content"
+    toc-location: left
+    embed-resources: true
+number-sections: false
+number-depth: 10
+mainfont: Times New Roman
+code-fold: false
+code-overflow: scroll
+code-line-numbers: true
+code-copy: true
+---
+
+This document reproduces the data wrangling, modelling and simulations from *Ramírez-Mejía et al. How much is enough? Optimizing beehive stocking densities to maximize the production of a pollinator-dependent crop*. I provided  annotations along the entire script, with emphasizing on the modelling and simulations sections. Also, in order to facilitate following the main document and coding procedure, I organized the script in the same order of the simulation phases: **(i)** the scenario, **(ii)** hives and bees, **(iii)** foraging pattern of honeybees, **(iv)** floral visits and pollen deposition, and **(v)** final crop yield.
+
+# (i) The scenario
+
+## Data pollination exclusion experiments
+
+### North Eastern Region of Argentina
+During two years, we did pollinator exclusion experiments were in  nine blueberry farms with an average separation of 9.5 km between contiguous farms. Each experiment consisted of two flowering branch per plant (15 plants per farm, N = 135), where we recorded the number of flowers setting fruit. One branch was surrounded with a nylon bag to prevent pollinators visiting flowers while the other remained open to animal pollination. We used the Emerald cultivar in all experiments.
+
+### Central Region of Argentina
+
+Pablo...
+
+## Data wrangling
+
+The following code merge read into `R` and merge both data sets into a list object `dat_fs`. This is the data structure needed to fit the following Bayesian model.
+
+```{r results='hide', message=FALSE, warning=FALSE}
+pks <- c('tidyverse', 'rethinking', 'rstan', 'magrittr', 'cmdstanr',
+         'ggdag', 'dagitty', 'readxl', 'brms', 'cowplot', 'parallel', 
+         'compiler', 'KneeArrower')
+
+sapply(pks, library, character.only = T)
+
+options(mc.core = parallel::detectCores())
+
+source('functions_mod_diagnostics.r')
+```
+
+
+
+```{r}
+dat_fs <- readRDS('fruit_set.rds')
+
+dat_fs <- dat_fs[, c("plant_id", "farm_id", "year_id",
+                     "beehive", "treatment", "flowers", "fruits")]
+
+dat_fs$treatment <- ifelse(dat_fs$treatment == 1, 'close', 'open')
+
+dat_fs |> 
+  ggplot(aes(as.factor(treatment), fruits)) +
+  geom_boxplot()
+
+dat_fs2 <- lapply(6:7, 
+                  function(x) {
+                    t <- read_xlsx('tesis_pablo.xlsx', 
+                                   shee = x, 
+                                   col_names = T, 
+                                   na = 'NA')[, 1:5]
+                    
+                    t$locality <- 'entre_rios'
+                    t$treatment <- 'open'
+                    
+                    colnames(t) <- c('farm_id', 'plant_id', 'branch_id',
+                                     'flowers', 'fruits', 'locality_id', 
+                                     'treatment')
+
+                    t$branch_id <- t %$% paste(farm_id,
+                                              plant_id,
+                                              branch_id,
+                                              sep = '')
+
+                    t$plant_id <- t %$% paste(farm_id,
+                                              plant_id,
+                                              sep = '')
+                    
+                    t
+                  })
+
+names(dat_fs2) <- paste('y', c(2016, 2021), sep = '')
+dat_fs2$y2016$year_id <- '2016'
+dat_fs2$y2021$year_id <- '2021'
+
+dat_fs$branch_id <- 1
+dat_fs$locality_id <- 'tucuman'
+
+
+dat_fs <- dat_fs[, c("farm_id", "plant_id", 
+                     'branch_id', "flowers", 
+                     "fruits", "locality_id", 
+                     "treatment", "year_id")]
+
+dat_fs$branch_id <- paste(dat_fs$farm_id, dat_fs$plant_id, 
+                          dat_fs$branch_id, sep = '_')
+dat_fs$plant_id <- paste(dat_fs$farm_id, 
+                         dat_fs$plant_id, sep = '_')
+
+
+dat_fs <- rbind(dat_fs, dat_fs2$y2016, dat_fs2$y2021)
+
+dat_fs <- na.omit(dat_fs)
+
+dat_fs <- 
+  lapply(dat_fs, 
+         function(x) {
+           if (is.character(x)) as.numeric(as.factor(x))
+           else x
+         })
+
+unlist(lapply(dat_fs, function(x) sum(is.na(x))))
+
+dat_fs$N <- length(dat_fs$plant_id)
+dat_fs$N_site <- length(unique(dat_fs$locality_id))
+dat_fs$N_farm <- length(unique(dat_fs$farm_id))
+dat_fs$N_plant <- length(unique(dat_fs$plant_id))
+dat_fs$N_branch <- length(unique(dat_fs$branch_id))
+dat_fs$N_treatment <- length(unique(dat_fs$treatment))
+dat_fs$N_year <- length(unique(dat_fs$year_id))
+
+```
+
+## Model 1: probability of blueberry flowers setting fruit
+
+### Matematical version
+
+$$
+
+\begin{align}
+
+& fruits~produced_i \sim binomial(n~sampled~flowers_i, ~p_i)\\
+& logit(p_i) = \alpha_{treatment_i} + \theta_{[plant_i, treatmen_i]} + \\ 
+& \delta_{[farm_i, treatment_i]} + \lambda_{[region_i, treatment_i]} + \gamma_{[year_i, treatment_i]} \\
+& \alpha_{treatment} \sim normal(0, 1) \\
+& \theta_{[plant_i, treatmen_i]}  = (diag(\sigma_\theta), R_{cholesky~\theta}Z_\theta)^T \\
+& \delta_{[farm_i, treatment_i]} = (diag(\sigma_\delta), R_{cholesky~\delta}Z_\delta)^T \\
+& \lambda_{[region_i, treatment_i]} = (diag(\sigma_\lambda), R_{cholesky~\lambda}Z_\lambda)^T \\
+& \gamma_{[year_i, treatment_i]} = (diag(\sigma_\gamma), R_{cholesky~\gamma}Z_\gamma)^T \\
+& \sigma_\theta \sim exponential(1) \\
+& \sigma_\delta \sim exponential(1) \\
+& \sigma_\lambda \sim exponential(1) \\
+& \sigma_\gamma \sim exponential(1) \\
+& R_{cholesky~\theta} \sim LKJCorr(2) \\
+& R_{cholesky~\delta} \sim LKJCorr(2) \\
+& R_{cholesky~lambda} \sim LKJCorr(2) \\
+& R_{cholesky~\gamma} \sim LKJCorr(2) \\
+& Z_\theta \sim normal(0, 0.5) \\
+& Z_\delta \sim normal(0, 0.5) \\
+& Z_\lambda \sim normal(0, 0.5) \\
+& Z_\gamma \sim normal(0, 0.5) \\
+
+\end{align}
+
+$$
+
+
+```{r eval=FALSE, echo=TRUE}
+cat(file = 'fruit_set.stan', 
+    "
+    data{
+      int N;
+      int N_site;
+      int N_farm;
+      int N_plant;
+      //int N_branch;
+      int N_treatment;
+      int N_year;
+      array[N] int flowers;
+      array[N] int fruits;
+      array[N] int year_id;
+      array[N] int locality_id;
+      array[N] int farm_id;
+      array[N] int plant_id;
+      //array[N] int branch_id;
+      array[N] int treatment;
+    }
+    
+    parameters{
+      vector[N_treatment] t;
+      
+      matrix[N_treatment, N_year] Z_year;
+      cholesky_factor_corr[N_treatment] R_year;
+      vector<lower = 0>[N_treatment] sigma_year;
+      
+      matrix[N_treatment, N_site] Z_locality;
+      cholesky_factor_corr[N_treatment] R_locality;
+      vector<lower = 0>[N_treatment] sigma_locality;
+    
+      matrix[N_treatment, N_farm] Z_farm;
+      cholesky_factor_corr[N_treatment] R_farm;
+      vector<lower = 0>[N_treatment] sigma_farm;
+    
+      matrix[N_treatment, N_plant] Z_plant;
+      cholesky_factor_corr[N_treatment] R_plant;
+      vector<lower = 0>[N_treatment] sigma_plant;
+      
+      //vector[N_branch] branch;
+      
+    }
+    
+    transformed parameters{
+      matrix[N_year, N_treatment] year;
+      matrix[N_site, N_treatment] locality;
+      matrix[N_farm, N_treatment] farm;
+      matrix[N_plant, N_treatment] plant;
+    
+      year = (diag_pre_multiply(sigma_year, R_year) * Z_year)';
+      locality = (diag_pre_multiply(sigma_locality, R_locality) * Z_locality)';
+      farm = (diag_pre_multiply(sigma_farm, R_farm) * Z_farm)';
+      plant = (diag_pre_multiply(sigma_plant, R_plant) * Z_plant)';
+    }
+    
+    model{
+      vector[N] p;
+      t ~ normal(0, 1);
+    
+      to_vector(Z_year) ~ normal(0, 0.5);
+      R_year ~ lkj_corr_cholesky(2);
+      sigma_year ~ exponential(1);
+    
+      to_vector(Z_locality) ~ normal(0, 0.5);
+      R_locality ~ lkj_corr_cholesky(2);
+      sigma_locality ~ exponential(1);
+    
+      to_vector(Z_farm) ~ normal(0, 0.5);
+      R_farm ~ lkj_corr_cholesky(2);
+      sigma_farm ~ exponential(1);
+    
+      to_vector(Z_plant) ~ normal(0, 0.5);
+      R_plant ~ lkj_corr_cholesky(2);
+      sigma_plant ~ exponential(1);
+      //branch ~ normal(0, 1);
+    
+      for (i in 1:N) {
+        p[i] = t[treatment[i]] + 
+                locality[locality_id[i], treatment[i]] + 
+                farm[farm_id[i], treatment[i]] +
+                plant[plant_id[i], treatment[i]] +
+                year[year_id[i], treatment[i]]; 
+        
+        p[i] = inv_logit(p[i]);
+      }
+      
+      fruits ~ binomial(flowers, p);
+    }
+    
+    generated quantities{
+      vector[N] log_lik;
+      vector[N] p1;
+      array[N] int ppcheck;
+      matrix[N_treatment, N_treatment] Rho_year;
+      matrix[N_treatment, N_treatment] Rho_locality;
+      matrix[N_treatment, N_treatment] Rho_farm;
+      matrix[N_treatment, N_treatment] Rho_plant;
+    
+      Rho_year = multiply_lower_tri_self_transpose(R_year);
+      Rho_locality = multiply_lower_tri_self_transpose(R_locality);
+      Rho_farm = multiply_lower_tri_self_transpose(R_farm);
+      Rho_plant = multiply_lower_tri_self_transpose(R_plant);
+    
+      for (i in 1:N) {
+        p1[i] = t[treatment[i]] + 
+                locality[locality_id[i], treatment[i]] + 
+                farm[farm_id[i], treatment[i]] +
+                plant[plant_id[i], treatment[i]] +
+                year[year_id[i], treatment[i]]; 
+        
+        p1[i] = inv_logit(p1[i]);
+      }
+      
+      for (i in 1:N) log_lik[i] = binomial_lpmf(fruits[i] | flowers[i], p1[i]);
+    
+      ppcheck = binomial_rng(flowers, p1);
+    }
+    ")
+
+```
+
