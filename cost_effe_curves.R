@@ -87,8 +87,7 @@ hives_ha <- function(n_hives = 25, # n hives to be simulated
   set.seed(seed)
   prop_foragers <- rbeta(hive_ha, beta_1, beta_2)
   
-  set.seed(seed)
-  foragers_bees <- round(beehive_strength * sample(prop_foragers, hive_ha))
+  foragers_bees <- round(beehive_strength * prop_foragers, hive_ha)
   
   return(foragers_bees)
 }
@@ -146,24 +145,24 @@ foraging_time_LQ <- trip_span_LQ * trips_bee_LQ # foraging time in seconds
 jpeg('foraging_pattern.jpeg', width = 20, height = 12, units = 'cm', res = 700)
 par(mfrow = c(2, 2), mar = c(4.2, 4.2, 1, 1))
 
-plot(density(trip_frequency_HQ), col = 'gold3', main = '', ylim = c(0, 5.5),
+plot(density(trip_frequency_HQ), col = 'tan1', main = '', ylim = c(0, 5.5),
      xlab = 'Number of foraging trips (trips/90 min)', lwd = 2)
-lines(density(trip_frequency_LQ), col = 'cyan4', main = '',
+lines(density(trip_frequency_LQ), col = 'lightblue', main = '',
       xlab = 'Number of foraging trips (trips/90 min)', lwd = 2)
 
-plot(density(trip_span_HQ/60), col = 'gold3', main = '', xlim = c(10, 50),
+plot(density(trip_span_HQ/60), col = 'tan1', main = '', xlim = c(10, 50),
      xlab = 'Trip span (min)', lwd = 2)
-lines(density(trip_span_LQ/60), main = '', col = 'cyan4',
+lines(density(trip_span_LQ/60), main = '', col = 'lightblue',
       xlab = 'Trip span (min)', lwd = 2)
 
-plot(density(trips_bee_HQ), main = '', col = 'gold3',
+plot(density(trips_bee_HQ), main = '', col = 'tan1',
      xlab = 'Daily trips per bee', lwd = 2, ylim = c(0, 1))
-lines(density(trips_bee_LQ), main = '', col = 'cyan4',
+lines(density(trips_bee_LQ), main = '', col = 'lightblue',
       xlab = 'Daily trip per bee (min)', lwd = 2)
 
-plot(density((foraging_time_HQ/60)/60), col = 'gold3', main = '', ylim = c(0, 1.1),
+plot(density((foraging_time_HQ/60)/60), col = 'tan1', main = '', ylim = c(0, 1.1),
      xlab = 'Daily foraging time per bee (h)', lwd = 2, xlim = c(1, 6.5))
-lines(density((foraging_time_LQ/60)/60), main = '', col = 'cyan4',
+lines(density((foraging_time_LQ/60)/60), main = '', col = 'lightblue',
       xlab = 'Daily foraging time per bee (h)', lwd = 2)
 dev.off()
 
@@ -176,7 +175,7 @@ visit_span <- readRDS('honeybee_visit_span.rds')
 visit_span <- visit_span$A_mellifera
 
 plot(density(rlnorm(1e3, exp(0.5), exp(0.1))))
-plot(density(rgamma(1e3, exp(2)/2, 1/2)))
+plot(density(rgamma(1e3, exp(2.5)/0.5, 1/0.5)))
 
 cat(file = 'honeybee_visit.stan', 
     '
@@ -200,8 +199,8 @@ cat(file = 'honeybee_visit.stan',
     
     model{
       vector[N] p;
-      mu ~ normal(5, 1.5);
-      sigma ~ exponential(1);
+      mu ~ normal(3, 0.5);
+      sigma ~ exponential(3);
       sigma1 ~ exponential(1);
       z_alpha ~ normal(0, 1);
     
@@ -313,12 +312,17 @@ visits_day <- N_foraging_trips(iter = 2e4,
                                time_per_visit = time_visit_honeybee)
 Sys.time() - t1
 
+saveRDS(visits_day, 'visits_day_LQ.rds')
+visits_day <- readRDS('visits_day_LQ.rds')
+
+
 t1 <- Sys.time()
 visits_day_HQ <- N_foraging_trips(iter = 2e4, 
                                time_foragin = foraging_time_HQ, 
                                time_per_visit = time_visit_honeybee)
 Sys.time() - t1
-
+saveRDS(visits_day_HQ, 'visits_day_HQ.rds')
+visits_day_HQ <- readRDS('visits_day_HQ.rds')
 
 plot(density(visits_day), main = '', xlab = 'Number of floral visits of\n a single forager honeybee bee per day',
      lwd = 4, col = 'lightblue', xlim = c(395, 2000))
@@ -544,6 +548,8 @@ mod_fs_exp <-
   )
 
 mod_fs_exp$save_object('mod_blueberry_fs.rds')
+
+mod_fs_exp <- readRDS('mod_blueberry_fs.rds')
 
 output_mod_fruitset <- mod_fs_exp$summary() 
 

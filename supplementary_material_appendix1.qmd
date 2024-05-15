@@ -22,13 +22,13 @@ code-line-numbers: true
 code-copy: true
 ---
 
-This document reproduces the data wrangling, modelling and simulations from *Ramírez-Mejía et al. How much is enough? Optimizing beehive stocking densities to maximize the production of a pollinator-dependent crop*. I provided  annotations along the entire script, with emphasizing on the modelling and simulations sections. Also, in order to facilitate reading the script, I organized the script in the same order of the simulation phases: **(i)** the scenario, **(ii)** hives and bees, **(iii)** foraging pattern of honeybees, **(iv)** floral visits and pollen deposition, and **(v)** final crop yield.
+This document reproduces the data wrangling, modelling and simulations from *Ramírez-Mejía et al. How much is enough? Optimizing beehive stocking densities to maximize the production of a pollinator-dependent crop*. I provided  annotations along the entire script, with emphasizing on the modelling and simulations sections. Also, in order to facilitate reading the script, I organized it in the same order of the simulation phases: **(i)** the scenario, **(ii)** hives and bees, **(iii)** foraging pattern of honeybees, **(iv)** floral visits and pollen deposition, and **(v)** final crop yield.
 
 # (i) The scenario
 
 ## Data pollination exclusion experiments
 
-### North Eastern Region of Argentina
+### Northwestern Region of Argentina
 During two years, we did pollinator exclusion experiments in  nine blueberry farms with an average separation of 9.5 km between contiguous farms. Each experiment consisted of two flowering branch per plant (15 plants per farm, N = 135), where we recorded the number of flowers setting fruit. One branch was surrounded with a nylon bag to prevent pollinators visiting flowers while the other remained open to animal pollination. We used the Emerald cultivar in all experiments.
 
 ### Central Region of Argentina
@@ -350,7 +350,7 @@ for (i in 1:100) lines(density(ppcheck_fruit_set[i, ]), lwd = 0.1)
 lines(density(dat_fs$fruits), col = 'red', lwd = 2)
 ```
 
-Ppcheck ok!
+ppcheck ok!
 
 Extracting the marginalized posterior distribution of flowers setting fruit in open pollination treatment.
 ```{r}
@@ -370,7 +370,7 @@ plot(density(fruit_set), main = '',
 
 ## Data fruits production per plant
 
-explain de experimental design
+During the 2021 production season of the Northwestern Argentina, we use three farms to estimate the number of fruits produced by blueberry bushes. At each farm we chose five to six plots (Emerald cultivar, plot size $1.31~\pm~0.09~ha$ 0.09 ha) distributed from the farm border to interior to encompass potential variation in underlying pollination services, soil condition, irrigation system and plant age. The average nearest distance among plots was $384.4~\pm~197.5~m$. At each location we randomly selected five plants and counted the total number of fruits on two randomly chosen primary branches. The product of the average number of fruits per primary branch and number of primary branches was used as an estimate of total fruits produced by the plant.
 
 ## Data wrangling
 
@@ -400,10 +400,10 @@ $$
 \begin{align}
 
 & Total~fruit~bush_i \sim negative~binomial(\lambda_i, \sigma) \\
-& log(\lambda) = \alpha_{plant~i} + \theta_{plot~i} + \delta_{farm~i} \\
-& \alpha_{plant~i} = \mu_\alpha + Z_\alpha * \sigma_\alpha \\
-& \theta_{plot~i} = \mu_\theta + Z_\theta * \sigma_\theta \\
-& \delta_{farm~i} = \mu_\delta + Z_\delta * \sigma_\delta \\
+& log(\lambda_i) = \alpha_{plant~i} + \theta_{plot~i} + \delta_{farm~i} \\
+& \alpha_{plant~i} = \mu_\alpha + Z_\alpha \times \sigma_\alpha \\
+& \theta_{plot~i} = \mu_\theta + Z_\theta \times \sigma_\theta \\
+& \delta_{farm~i} = \mu_\delta + Z_\delta \times \sigma_\delta \\
 & \mu_\alpha \sim normal(7, 2) \\
 & \mu_\theta \sim normal(0, 1) \\
 & \mu_\delta \sim normal(0, 1) \\
@@ -416,7 +416,7 @@ $$
 
 \end{align}
 $$
-Here, we used the $plant_i$ as the model's intercept. The $\mu_\alpha \sim normal(7, 2)$ encompas the expected average number of fruits produced per plant ($\lambda$ parameter). We used a non-centered parametrization to fit the model.
+We used the $plant_i$ as the model's intercept, so the exponentiation of $normal(7, 2)$ denotes the expected average number of number of fruits per blueberry bush ($\lambda_i$ parameter). We used a non-centered parametrization to fit the model.
 
 ### Model in Stan code
 
@@ -574,3 +574,357 @@ plot(density(total_fruts), xlab = 'Fruits produced per\n blueberry bush',
      lwd = 3, col = 'lightblue', main = '')
 
 ```
+
+## Total fruits produced by the plant
+
+```{r}
+set.seed(123)
+total_flowers <- 
+  total_fruts + 
+  (total_fruts * 
+     (1-sample(fruit_set, length(total_fruts), T)))
+
+total_flowers <- round(total_flowers)
+
+par(mfrow = c(1, 2), mar = c(4, 4, 0.5, 0.5))
+plot(density(total_flowers), main = '', 
+     xlab = 'Flowers per blueberry bush', xlim = c(0, 20e3), 
+     lwd = 4, col = 'lightblue') 
+plot(density(rbeta(2e3, 6, 4)), 
+     xlab = 'Flowering proportion', ylab = '',
+     lwd = 4, col = 'lightblue', main = '')
+
+```
+
+# (ii) Hives and bees
+
+## Quality of the hives
+`hives_ha` simulate *N* hives with an specific colony population size, and proportion of foragers. 
+```{r}
+hives_ha <- function(n_hives = 25, # n hives to be simulated
+                     mu_pop = 1e4, # mu parameter NegBin distribution (i.e. N bees per hive)
+                     sigma_pop = 10, # dispersion parameter NegBin distribution. N Bees per hive
+                     beta_1 = 2.5, # parameter 1 beta distribution. Proportion of foragers
+                     beta_2 = 8, # parameter 1 beta distribution. Proportion of foragers
+                     seed = 1){ # set seed to reproduce the analysis
+  
+  hive_ha <- n_hives # hives per ha
+  
+  set.seed(seed) 
+  # Simulating the number of bees per hive j from the negative binomial distribution
+  beehive_strength <- rnbinom(hive_ha, size = sigma_pop, mu = mu_pop)
+  
+  set.seed(seed)
+  # Simulating the proportion of foragers per hive j from
+  prop_foragers <- rbeta(hive_ha, beta_1, beta_2)
+  
+  set.seed(seed)
+  # simulated foragers per hive j 
+  foragers_bees <- round(beehive_strength * prop_foragers, hive_ha)
+  
+  return(foragers_bees)
+}
+
+```
+
+```{r, fig.cap= 'Orange = high-quality hives; Lightblue = low-quality hives'}
+par(mar = c(4.2, 4.2, 1, 1))
+
+plot(density(hives_ha(1e3, mu_pop = 10e3)), main = '', 
+     xlab = 'Foragers per hive', lwd = 2, col = 'lightblue')
+lines(density(hives_ha(1e3, mu_pop = 20e3)), lwd = 2, 
+     col = 'tan1')
+
+```
+
+## Foraging pattern of honeybees
+
+Assuming 8 hr of daily pollinators activity, we estimated the effective daily hours that each bee in the colony will spend for actively visiting flowers. This is based on the average and SD values reported by [Eckert et al. (1994)](https://www.jstor.org/stable/4220612) (Table 3) for nectar and pollen foragers from small and large honeybee hives. We used those values to parametrize normal distributions:
+
+```{r}
+###### high quality hives 
+ 
+# number of foraging trips within 90 min
+trip_frequency_HQ <- rnorm(5e4, # high quality hives
+                           mean(c(1.23, # nectar forager 
+                                  1.21)), # pollen forager
+                           mean(c(0.06, # nectar forager 
+                                  0.15))) # pollen forager
+
+# time span of a foraging trip (s)
+trip_span_HQ <- rnorm(5e4, 
+                      mean(c(1667.7, # nectar forager 
+                             2683.9)), # pollen forager
+                      mean(c(126.4, # nectar forager 
+                             250.7))) # pollen forager
+
+trips_bee_HQ <- 
+  trip_frequency_HQ * ((8*60)/90) # number of trips per day
+
+# dayly foraging time in seconds that a single bee from a high-quality hive 
+# would invest visiting flowers.
+foraging_time_HQ <- 
+  trip_span_HQ * trips_bee_HQ 
+
+###### low quality hives
+
+# number of foraging trips within 90 min
+trip_frequency_LQ <- rnorm(5e4, 
+                           mean(c(1, 1.4)), # nectar forager 
+                           mean(c(0, 0.16))) # pollen forager
+
+# time span of a foraging trip (s)
+trip_span_LQ <- rnorm(5e4, 
+                      mean(c(1210.8, 1680.4)), # nectar forager 
+                      mean(c(157.6, 212.6))) # pollen forager
+
+trips_bee_LQ <- trip_frequency_LQ * ((8*60)/90) # number of trips per day
+
+# dayly foraging time in seconds that a single bee from a low-quality hive 
+# would invest visiting flowers.
+foraging_time_LQ <- trip_span_LQ * trips_bee_LQ 
+
+```
+
+```{r, fig.cap= 'Orange = high-quality hives; Lightblue = low-quality hives'}
+par(mfrow = c(2, 2), mar = c(4.2, 4.2, 1, 1))
+
+plot(density(trip_frequency_HQ), col = 'tan1', main = '', ylim = c(0, 5.5),
+     xlab = 'Number of foraging trips (trips/90 min)', lwd = 2)
+lines(density(trip_frequency_LQ), col = 'lightblue', main = '',
+      xlab = 'Number of foraging trips (trips/90 min)', lwd = 2)
+
+plot(density(trip_span_HQ/60), col = 'tan1', main = '', xlim = c(10, 50),
+     xlab = 'Trip span (min)', lwd = 2)
+lines(density(trip_span_LQ/60), main = '', col = 'lightblue',
+      xlab = 'Trip span (min)', lwd = 2)
+
+plot(density(trips_bee_HQ), main = '', col = 'tan1',
+     xlab = 'Daily trips per bee', lwd = 2, ylim = c(0, 1))
+lines(density(trips_bee_LQ), main = '', col = 'lightblue',
+      xlab = 'Daily trip per bee (min)', lwd = 2)
+
+plot(density((foraging_time_HQ/60)/60), col = 'tan1', main = '', ylim = c(0, 1.1),
+     xlab = 'Daily foraging time per bee (h)', lwd = 2, xlim = c(1, 6.5))
+lines(density((foraging_time_LQ/60)/60), main = '', col = 'lightblue',
+      xlab = 'Daily foraging time per bee (h)', lwd = 2)
+
+```
+
+## Time of floral visit
+
+During the blueberry flowering season of 2019 and 2021 in Northwestern Argentina, we walked through the crop searching for individuals of honeybees to record, with a chronometer, the time span of floral visit. We conducted those walks during sunny days and favorable weather conditions.
+
+## Data wrangling
+
+```{r}
+visit_span <- readRDS('honeybee_visit_span.rds')
+
+visit_span <- visit_span$A_mellifera
+
+length(visit_span) # sampling size (N independent records)
+
+```
+
+## Model time of floral visit
+
+## Matematical model
+
+$$
+\begin{align}
+
+& time~of~floral~visit_i \sim gamma(\frac{\mu_i}{\sigma}, \frac{1}{\sigma}) \\
+& log(\mu_i) = \alpha_{individual~ i} \\
+& \alpha_{individual~ i} = \mu_\alpha + Z_\alpha \times \sigma_\alpha \\
+& \mu_\alpha \sim normal(5, 1.5) \\
+& Z_\alpha \sim normal(0, 1) \\
+& \sigma_\alpha \sim exponential(1) \\
+\end{align}
+$$
+
+## Model in Stan code
+
+```{r}
+cat(file = 'honeybee_visit.stan', 
+    '
+    data{
+      int N;
+      vector[N] visit;
+      array[N] int individual;
+    }
+    
+    parameters{
+      vector[N] z_alpha;
+      real<lower = 0> mu;
+      real<lower = 0> sigma;
+      real<lower = 0> sigma1;
+    }
+    
+    transformed parameters{
+      vector[N] alpha;
+      alpha = mu + z_alpha * sigma1;
+    }
+    
+    model{
+      vector[N] p;
+      mu ~ normal(3, 0.5);
+      sigma ~ exponential(3);
+      sigma1 ~ exponential(1);
+      z_alpha ~ normal(0, 1);
+    
+      for (i in 1:N) {
+        p[i] = alpha[individual[i]];
+        p[i] = exp(p[i]);
+      }
+      
+      visit ~ gamma(p/sigma, 1/sigma);
+    }
+    
+    generated quantities{
+      vector[N] log_lik;
+      vector[N] p;
+      array[N] real ppcheck;
+      
+      for (i in 1:N) {
+        p[i] = alpha[individual[i]];
+        p[i] = exp(p[i]);
+      }
+    
+      for (i in 1:N) log_lik[i] = gamma_lpdf(visit[i] | p[i]/sigma, 1/sigma);
+    
+      ppcheck = gamma_rng(p/sigma, 1/sigma);
+    }
+    ')
+
+```
+
+### Running MCMC algorith and model's outputs
+```{r warning=FALSE, message=FALSE, error=FALSE}
+file <- paste(getwd(), '/honeybee_visit.stan', sep = '')
+fit_visit_honeybee <- cmdstan_model(file, compile = T)
+
+mod_visit_honeybee <- 
+  fit_visit_honeybee$sample(
+    data = list(visit = visit_span, 
+                N = length(visit_span), 
+                individual = 1:length(visit_span)),
+    iter_sampling = 30e3, 
+    iter_warmup = 500, 
+    chains = 3, 
+    parallel_chains = 3, 
+    thin = 3, 
+    seed = 123, 
+    refresh = 500
+  )
+
+```
+
+#### Model's diagnostics
+```{r}
+(output_mod_visit_honeybee <- mod_visit_honeybee$summary())
+
+mod_diagnostics(mod_visit_honeybee, output_mod_visit_honeybee)
+
+par(mfrow = c(3, 3), mar = c(4, 4, 1, 1))
+for (i in 1:9) trace_plot(mod_visit_honeybee, output_mod_visit_honeybee$variable[i], 3)
+par(mfrow = c(1, 1))
+```
+Chain convergenceits ok 
+
+#### Model's ppcheck
+```{r}
+ppcheck_visit_honeybee <- mod_visit_honeybee$draws(variables = 'ppcheck', 
+                                                   format = 'matrix')
+
+plot(density(ppcheck_visit_honeybee[1, ]), ylim = c(0, 0.09), lwd = 0.1, 
+     main = '', xlab = 'Honeybee time of floral visit (s)')
+for (i in 1:100) lines(density(ppcheck_visit_honeybee[i, ]), lwd = 0.1)
+lines(density(visit_span), col = 'red', lwd = 2)
+
+```
+ppcheck ok!
+
+
+#### Time of floral visit
+
+Posterior predictive distribution of the time span of a honeybee visiting a blueberry flower (s).
+```{r}
+time_visit_honeybee <- as.vector(ppcheck_visit_honeybee)
+par(mar = c(4, 4, 1, 1))
+plot(density(time_visit_honeybee), col = 'tan1', lwd = 3, 
+     main = '', xlab = 'Time span of floral visit (s)')
+```
+
+## Foraging trips per day
+
+explanation ... foraging hour and time of visits per flower
+
+```{r}
+# function to estimate the number of foraging trip per individual i in 
+# hive j, depending on the quality of the hive.
+
+N_foraging_trips <- 
+  
+  function(iter, # bees per hive 
+           time_foragin, # effective time to forage during the day
+           time_per_visit, # posterior distribution of time spend per visit
+           seed = 123) { 
+    
+    set.seed(seed)
+    time_foragin <- sample(time_foragin, iter, T)
+    
+    t1 <- Sys.time()
+    visits_bee <- 
+      sapply(1:iter, FUN = 
+               function(x) {
+                 
+                 time <- 0
+                 vis <- 0
+                 
+                 while (time < time_foragin[[x]]) {
+                   time <- time + sample(time_per_visit, 1)
+                   vis <- vis + 1
+                 }
+                 
+                 vis
+                 
+               })
+    message(paste('Execution time', Sys.time() - t1))
+    
+    return(visits_bee)
+    
+  }
+
+```
+
+
+```{r, fig.cap= 'Orange = high-quality hives; Lightblue = low-quality hives'}
+# t1 <- Sys.time()
+# visits_day <- N_foraging_trips(iter = 2e4, 
+#                                time_foragin = foraging_time_LQ, 
+#                                time_per_visit = time_visit_honeybee)
+# Sys.time() - t1
+
+visits_day <- readRDS('visits_day_LQ.rds')
+
+
+# t1 <- Sys.time()
+# visits_day_HQ <- N_foraging_trips(iter = 2e4, 
+#                                time_foragin = foraging_time_HQ, 
+#                                time_per_visit = time_visit_honeybee)
+# Sys.time() - t1
+
+visits_day_HQ <- readRDS('visits_day_HQ.rds')
+
+plot(density(visits_day), main = '', xlab = 'Number of floral visits of\n a single forager honeybee bee per day',
+     lwd = 4, col = 'lightblue', xlim = c(395, 2000))
+lines(density(visits_day_HQ), lwd = 4, col = 'tan1')
+
+```
+
+# (iii) Foraging pattern of honeybees
+
+# (iv) Floral visits and pollen deposition
+
+# (v) Final crop yield
+
