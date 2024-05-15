@@ -13,7 +13,7 @@ format:
     toc-title: "Content"
     toc-location: left
     embed-resources: true
-number-sections: false
+number-sections: true
 number-depth: 10
 mainfont: Times New Roman
 code-fold: false
@@ -22,14 +22,14 @@ code-line-numbers: true
 code-copy: true
 ---
 
-This document reproduces the data wrangling, modelling and simulations from *Ramírez-Mejía et al. How much is enough? Optimizing beehive stocking densities to maximize the production of a pollinator-dependent crop*. I provided  annotations along the entire script, with emphasizing on the modelling and simulations sections. Also, in order to facilitate following the main document and coding procedure, I organized the script in the same order of the simulation phases: **(i)** the scenario, **(ii)** hives and bees, **(iii)** foraging pattern of honeybees, **(iv)** floral visits and pollen deposition, and **(v)** final crop yield.
+This document reproduces the data wrangling, modelling and simulations from *Ramírez-Mejía et al. How much is enough? Optimizing beehive stocking densities to maximize the production of a pollinator-dependent crop*. I provided  annotations along the entire script, with emphasizing on the modelling and simulations sections. Also, in order to facilitate reading the script, I organized the script in the same order of the simulation phases: **(i)** the scenario, **(ii)** hives and bees, **(iii)** foraging pattern of honeybees, **(iv)** floral visits and pollen deposition, and **(v)** final crop yield.
 
 # (i) The scenario
 
 ## Data pollination exclusion experiments
 
 ### North Eastern Region of Argentina
-During two years, we did pollinator exclusion experiments were in  nine blueberry farms with an average separation of 9.5 km between contiguous farms. Each experiment consisted of two flowering branch per plant (15 plants per farm, N = 135), where we recorded the number of flowers setting fruit. One branch was surrounded with a nylon bag to prevent pollinators visiting flowers while the other remained open to animal pollination. We used the Emerald cultivar in all experiments.
+During two years, we did pollinator exclusion experiments in  nine blueberry farms with an average separation of 9.5 km between contiguous farms. Each experiment consisted of two flowering branch per plant (15 plants per farm, N = 135), where we recorded the number of flowers setting fruit. One branch was surrounded with a nylon bag to prevent pollinators visiting flowers while the other remained open to animal pollination. We used the Emerald cultivar in all experiments.
 
 ### Central Region of Argentina
 
@@ -37,7 +37,7 @@ Pablo...
 
 ## Data wrangling
 
-The following code merge read into `R` and merge both data sets into a list object `dat_fs`. This is the data structure needed to fit the following Bayesian model.
+The following code read into `R` and merge both data sets in a list object `dat_fs`. This is the data structure needed to fit the following Bayesian model.
 
 ```{r results='hide', message=FALSE, warning=FALSE}
 pks <- c('tidyverse', 'rethinking', 'rstan', 'magrittr', 'cmdstanr',
@@ -48,10 +48,9 @@ sapply(pks, library, character.only = T)
 
 options(mc.core = parallel::detectCores())
 
-source('functions_mod_diagnostics.r')
+source('functions_mod_diagnostics.r') 
+# this is an script to load functions for bayesian model diagnostics
 ```
-
-
 
 ```{r}
 dat_fs <- readRDS('fruit_set.rds')
@@ -60,10 +59,6 @@ dat_fs <- dat_fs[, c("plant_id", "farm_id", "year_id",
                      "beehive", "treatment", "flowers", "fruits")]
 
 dat_fs$treatment <- ifelse(dat_fs$treatment == 1, 'close', 'open')
-
-dat_fs |> 
-  ggplot(aes(as.factor(treatment), fruits)) +
-  geom_boxplot()
 
 dat_fs2 <- lapply(6:7, 
                   function(x) {
@@ -165,7 +160,12 @@ $$
 \end{align}
 
 $$
+We used $\alpha_{treatment} \sim normal(0, 1)$ as intercept, with a 
+parametrization covering values from $-3.4$ to $3.4$ in the logit scales, which
+basically implies all possible values in a probability scale. $LKJCorr(2)$ set 
+values from $-1$ to $1$ for the probability distribution of correlations. $exponential(1)$ and $normal(0, 0.5)$ set standard priors for the dispersion and groupl-level effects parameters. We fitted the model using a non-centered parametrization.
 
+### Model in Stan code
 
 ```{r eval=FALSE, echo=TRUE}
 cat(file = 'fruit_set.stan', 
@@ -289,3 +289,288 @@ cat(file = 'fruit_set.stan',
 
 ```
 
+### Running MCMC algorith and model's outputs
+
+```{r eval = F}
+file <- paste(getwd(), '/fruit_set.stan', sep = '')
+
+fit_fruit_set <- cmdstan_model(file, compile = T)
+
+mod_fs_exp <- 
+  fit_fruit_set$sample(
+    data = dat_fs, 
+    chains = 3, 
+    parallel_chains = 3, 
+    iter_warmup = 500, 
+    iter_sampling = 4e3,
+    thin = 3,
+    seed = 123,
+    refresh = 500
+  )
+```
+
+
+#### Model's diagnostics
+```{r warning=FALSE, message=FALSE}
+
+mod_fs_exp <- readRDS('mod_blueberry_fs.rds')
+
+output_mod_fruitset <- mod_fs_exp$summary() 
+
+mod_diagnostics(mod_fs_exp, output_mod_fruitset)
+
+par(mfrow = c(3, 3), mar = c(4, 4, 1, 1))
+for (i in 2:10) {
+  trace_plot(mod_fs_exp, output_mod_fruitset$variable[i], 3)
+}
+par(mfrow = c(1, 1))
+
+post_fruitset <- mod_fs_exp$draws(format = 'df')
+
+post_fruitset <- as.matrix(post_fruitset)
+
+```
+Chain convergence ok and enough *ess* for all parameters. We had some observations with high pareto-k values, but, as you can see below, the model predicts well the observed data.
+
+#### Model's ppcheck
+
+```{r}
+post_fruitset <- 
+  list(treatment = post_fruitset[, grep('^t', colnames(post_fruitset))], 
+       locality = post_fruitset[, grep('^locality', colnames(post_fruitset))], 
+       farm = post_fruitset[, grep('^farm', colnames(post_fruitset))], 
+       plant = post_fruitset[, grep('^plant', colnames(post_fruitset))],
+       year = post_fruitset[, grep('^year', colnames(post_fruitset))])
+
+ppcheck_fruit_set <- mod_fs_exp$draws(variables = 'ppcheck', format = 'matrix')
+
+plot(density(ppcheck_fruit_set[1, ]), ylim = c(0, 0.025), lwd = 0.1, 
+     main = '', xlab = 'Number of fruit')
+for (i in 1:100) lines(density(ppcheck_fruit_set[i, ]), lwd = 0.1)
+lines(density(dat_fs$fruits), col = 'red', lwd = 2)
+```
+
+Ppcheck ok!
+
+Extracting the marginalized posterior distribution of flowers setting fruit in open pollination treatment.
+```{r}
+fruit_set <- 
+  inv_logit(
+    post_fruitset$treatment[, 2, drop = T] +
+      apply(post_fruitset$locality, 1, mean) + 
+      apply(post_fruitset$farm, 1, mean) +
+      apply(post_fruitset$plant, 1, mean) +
+      apply(post_fruitset$year, 1, mean) 
+  )
+
+plot(density(fruit_set), main = '', 
+     xlab = 'Probability of blueberry\n flowers setting fruit', col = 'lightblue', lwd = 4)
+
+```
+
+## Data fruits production per plant
+
+explain de experimental design
+
+## Data wrangling
+
+```{r}
+fruit_plant <- readRDS('fruit_plant.rds')
+
+fruit_plant$plant_id <- as.factor(paste(fruit_plant$farm, fruit_plant$plant, sep = '_'))
+
+fruit_plant$plot <- as.factor(paste(fruit_plant$farm, fruit_plant$plot, sep = '_'))
+
+fruit_plant <- fruit_plant[, c("farm", "plot", 'plant_id', "total_fruts")]
+
+fruit_plant <- lapply(fruit_plant, function(x) if(is.factor(x)) as.numeric(x) else(x))
+
+fruit_plant$N <- length(fruit_plant$farm)
+fruit_plant$N_farm <- length(unique(fruit_plant$farm))
+fruit_plant$N_plot <- length(unique(fruit_plant$plot))
+fruit_plant$N_plant <- length(unique(fruit_plant$plant))
+fruit_plant$total_fruts <- round(fruit_plant$total_fruts)
+```
+
+## Model 2: number of fruits produced by a blueberry bush
+
+### Matematical version
+
+$$
+\begin{align}
+
+& Total~fruit~bush_i \sim negative~binomial(\lambda_i, \sigma) \\
+& log(\lambda) = \alpha_{plant~i} + \theta_{plot~i} + \delta_{farm~i} \\
+& \alpha_{plant~i} = \mu_\alpha + Z_\alpha * \sigma_\alpha \\
+& \theta_{plot~i} = \mu_\theta + Z_\theta * \sigma_\theta \\
+& \delta_{farm~i} = \mu_\delta + Z_\delta * \sigma_\delta \\
+& \mu_\alpha \sim normal(7, 2) \\
+& \mu_\theta \sim normal(0, 1) \\
+& \mu_\delta \sim normal(0, 1) \\
+& Z_\alpha \sim normal(0, 1) \\
+& Z_\theta \sim normal(0, 1) \\
+& Z_\delta \sim normal(0, 1) \\
+& \sigma_\alpha \sim exponential(1) \\
+& \sigma_\theta \sim exponential(1) \\
+& \sigma_\delta \sim exponential(1) \\
+
+\end{align}
+$$
+Here, we used the $plant_i$ as the model's intercept. The $\mu_\alpha \sim normal(7, 2)$ encompas the expected average number of fruits produced per plant ($\lambda$ parameter). We used a non-centered parametrization to fit the model.
+
+### Model in Stan code
+
+```{r eval=T}
+cat(file = 'fruits_plant.stan', 
+    "
+    data{
+      int N;
+      int N_farm;
+      int N_plot;
+      int N_plant;
+      array[N] int plant_id;
+      array[N] int total_fruts;
+      array[N] int farm;
+      array[N] int plot;
+    }
+    
+    parameters{
+      vector[N_plant] z_plant;
+      real mu_plant;
+      real<lower = 0> sigma_plant;
+    
+      vector[N_farm] z_farm;
+      real mu_farm;
+      real<lower = 0> sigma_farm;
+    
+      vector[N_plot] z_plot;
+      real mu_plot;
+      real<lower = 0> sigma_plot;
+    
+      real<lower = 0> scale;
+    }
+    
+    transformed parameters{
+      vector[N_plant] theta;
+      vector[N_farm] alpha;
+      vector[N_plot] tau;
+      theta = mu_plant + z_plant * sigma_plant;
+      alpha = mu_farm + z_farm * sigma_farm;
+      tau = mu_plot + z_plot * sigma_plot;
+      
+    }
+    
+    model{
+      vector[N] mu;
+    
+      mu_plant ~ normal(7, 2);
+      z_plant ~ normal(0, 1);
+      sigma_plant ~ exponential(1);
+    
+      mu_farm ~ normal(0, 1);
+      z_farm ~ normal(0, 1);
+      sigma_farm ~ exponential(1);
+      
+      mu_plot ~ normal(0, 1);
+      z_plot ~ normal(0, 1);
+      sigma_plot ~ exponential(1);
+    
+      scale ~ exponential(1);
+    
+      for (i in 1:N) {
+        mu[i] = theta[plant_id[i]] + alpha[farm[i]] + 
+                tau[plot[i]];
+        mu[i] = exp(mu[i]);
+      }
+    
+      total_fruts ~ neg_binomial_2(mu, scale);  
+    }
+    
+    generated quantities{
+      vector[N] log_lik;
+      vector[N] mu_1;
+      array[N] int ppcheck;
+    
+      for (i in 1:N) {
+        mu_1[i] = theta[plant_id[i]] + alpha[farm[i]] + 
+                tau[plot[i]];
+        mu_1[i] = exp(mu_1[i]);
+      }
+    
+      for (i in 1:N) log_lik[i] = neg_binomial_2_lpmf(total_fruts[i] | mu_1[i], scale);
+    
+      ppcheck = neg_binomial_2_rng(mu_1, scale);
+      
+    }
+    
+    ")
+```
+
+### Running MCMC algorith and model's outputs
+
+```{r, warning=FALSE, message=FALSE, error=FALSE}
+file <- paste(getwd(), '/fruits_plant.stan', sep = '')
+
+fit_fruit_plant <- cmdstan_model(file, compile = T)
+
+mod_fruit_plant <- 
+  fit_fruit_plant$sample(
+    data = fruit_plant, 
+    chains = 3, 
+    parallel_chains = 3, 
+    iter_sampling = 2e3, 
+    iter_warmup = 500, 
+    thin = 3, 
+    seed = 123, 
+    refresh = 500
+  )
+
+```
+
+
+#### Model's diagnostics
+```{r warning=FALSE, message=FALSE}
+
+output_mod_tot_fru <- mod_fruit_plant$summary()
+
+mod_diagnostics(mod_fruit_plant, output_mod_tot_fru)
+
+trace_plot(mod_fruit_plant, output_mod_tot_fru$variable[1], 3)
+
+par(mfrow = c(3, 3), mar = c(4, 4, 1, 1))
+for (i in 2:10) trace_plot(mod_fruit_plant, output_mod_tot_fru$variable[i], 3)
+par(mfrow = c(1, 1))
+
+post_tot_fruit <- mod_fruit_plant$draws(format = 'df')
+
+post_tot_fruit <- 
+  list(plant = post_tot_fruit[, grep('theta', colnames(post_tot_fruit))],
+       farm = post_tot_fruit[, grep('alpha', colnames(post_tot_fruit))], 
+       plot = post_tot_fruit[, grep('tau', colnames(post_tot_fruit))], 
+       scale = post_tot_fruit$scale)
+
+```
+Chain convergence ok and enough *ess* for all parameters. 
+
+#### Model's ppcheck
+
+```{r}
+ppcheck_tot_fru <- mod_fruit_plant$draws(variables = 'ppcheck', format = 'matrix')
+
+plot(density(ppcheck_tot_fru[1, ]), ylim = c(0, 0.00025), main = '', 
+     xlab = 'Fruit produced per plant', lwd = 0.1)
+for (i in 1:100) lines(density(ppcheck_tot_fru[i, ]), lwd = 0.1)
+lines(density(fruit_plant$total_fruts), col = 'red', lwd = 2)
+
+```
+
+Ppcheck ok!
+
+Extracting the posterior predictive distribution of fruits produced per blueberry bush.
+```{r}
+total_fruts <- as.vector(ppcheck_tot_fru)
+
+plot(density(total_fruts), xlab = 'Fruits produced per\n blueberry bush', 
+     lwd = 3, col = 'lightblue', main = '')
+
+```

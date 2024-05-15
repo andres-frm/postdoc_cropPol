@@ -543,6 +543,8 @@ mod_fs_exp <-
     refresh = 200
   )
 
+mod_fs_exp$save_object('mod_blueberry_fs.rds')
+
 output_mod_fruitset <- mod_fs_exp$summary() 
 
 mod_diagnostics(mod_fs_exp, output_mod_fruitset)
@@ -610,7 +612,7 @@ fruit_plant$N_plot <- length(unique(fruit_plant$plot))
 fruit_plant$N_plant <- length(unique(fruit_plant$plant))
 fruit_plant$total_fruts <- round(fruit_plant$total_fruts)
 
-plot(density(rnbinom(1e3, size = 2, mu = exp(8))))
+plot(density(rnbinom(1e3, size = 2, mu = exp(7))))
 
 cat(file = 'fruits_plant.stan', 
     "
@@ -737,9 +739,10 @@ plot(density(ppcheck_tot_fru[1, ]), ylim = c(0, 0.00025), main = '',
 for (i in 1:100) lines(density(ppcheck_tot_fru[i, ]), lwd = 0.1)
 lines(density(fruit_plant$total_fruts), col = 'red', lwd = 2)
 
-
 total_fruts <- as.vector(ppcheck_tot_fru)
 
+plot(density(total_fruts), xlab = 'Fruits produced per\n blueberry bush', 
+     lwd = 3, col = 'lightblue', main = '')
 
 # ======== 3. flowers produced by plant ========
 
