@@ -637,7 +637,8 @@ lines(density(hives_ha(1e3, mu_pop = 20e3)), lwd = 2,
 
 ```
 
-## Foraging pattern of honeybees
+
+# (iii) Foraging pattern of honeybees
 
 Assuming 8 hr of daily pollinators activity, we estimated the effective daily hours that each bee in the colony will spend for actively visiting flowers. This is based on the average and SD values reported by [Eckert et al. (1994)](https://www.jstor.org/stable/4220612) (Table 3) for nectar and pollen foragers from small and large honeybee hives. We used those values to parametrize normal distributions:
 
@@ -728,7 +729,7 @@ length(visit_span) # sampling size (N independent records)
 
 ## Model time of floral visit
 
-## Matematical model
+### Matematical version
 
 $$
 \begin{align}
@@ -742,7 +743,7 @@ $$
 \end{align}
 $$
 
-## Model in Stan code
+### Model in Stan code
 
 ```{r}
 cat(file = 'honeybee_visit.stan', 
@@ -857,7 +858,7 @@ plot(density(time_visit_honeybee), col = 'tan1', lwd = 3,
 
 ## Foraging trips per day
 
-explanation ... foraging hour and time of visits per flower
+The purpose od `N_foraging_trips` function was using the distribution of hours spend visiting flowers daily, and the time of floral visits, to estimate the number of floral visits that a single honeybee can conduct daily. To do so, the functions conduct simulations of random time of floral visits until until complete the bee hours for foraging in a single day.
 
 ```{r}
 # function to estimate the number of foraging trip per individual i in 
@@ -871,22 +872,29 @@ N_foraging_trips <-
            seed = 123) { 
     
     set.seed(seed)
+    # a honeybee i with a random  daily foraging time (hr) j
     time_foragin <- sample(time_foragin, iter, T)
     
     t1 <- Sys.time()
     visits_bee <- 
       sapply(1:iter, FUN = 
+               # loop through each honeybee i with daily foraging time j
                function(x) {
                  
                  time <- 0
                  vis <- 0
                  
                  while (time < time_foragin[[x]]) {
+                   # each honeybee i accumulates random floral visits with
+                   # time span k (s) without surpassing its total foraging 
+                   # time j.
                    time <- time + sample(time_per_visit, 1)
                    vis <- vis + 1
                  }
                  
-                 vis
+                 vis  
+                 # number of daily floral visits of the honeybee i with foraging
+                 # time j
                  
                })
     message(paste('Execution time', Sys.time() - t1))
@@ -922,9 +930,320 @@ lines(density(visits_day_HQ), lwd = 4, col = 'tan1')
 
 ```
 
-# (iii) Foraging pattern of honeybees
-
 # (iv) Floral visits and pollen deposition
+
+## Honeybees single-visit pollen deposition to blueberry flowers
+
+We conducted a field experiment to evaluate per-visit pollen deposition of honeybees. To do this, we placed nylon mesh bags over blueberry flowering branches with immature flowers to prevent pollen deposition by pollinators. When the flowers were fully open, we removed the bag, cut the branch and kept it fresh in water. We then walked through the crop to offer the virgin flowers to honeybees. After a single honeybee-visit, we isolated the flower, tagged it, and brought the flowering branches to the laboratory for a period of at least 12 hours to ensure that pollen grains had fully adhered to the stigma. We then collected the style and stored it in an Eppendorf tube containing 70% ethanol. In the laboratory, we did a transversal cut of the style at the stigma height and placed it on a microscope slide. We then covered the stigma with a drop of Alexander’s stain, crushed it with a coverslip and counted the pollen grains under a microscope.
+
+## Data wrangling
+
+```{r}
+apisSVP <- readRDS('honeybee_svpd_data.rds')
+```
+
+```{r echo=FALSE}
+apisSVP <- apisSVP[-which.max(apisSVP)] # removing value with 155 pollen deposition
+```
+
+```{r}
+length(apisSVP) # sampling size
+
+dat_apis <- list(pollen = apisSVP, 
+                 N = length(apisSVP), 
+                 ind_id = 1:length(apisSVP), 
+                 N_ind = length(apisSVP))
+```
+
+## Model single-visit pollen deposition
+
+### Matematical version
+
+$$
+\begin{align}
+
+& Pollen~deposition_i \sim negative~binomial(\lambda_i, \sigma) \\
+& log(\lambda_i) = \alpha_{individual~i} \\
+& \alpha_{individual~i} = \mu_\alpha + Z_\alpha \times \sigma_\alpha \\
+& \mu_\alpha \sim normal(3, 0.5) \\
+& Z_\alpha \sim normal(0, 1) \\
+& \sigma_\alpha \sim exponential(1) \\
+
+\end{align}
+$$
+We used $\mu_\alpha \sim normal(3, 0.5)$ since it encompass the expected average pollen deposition during a single honeybee visit to blueberry flowers. We used a non-centered parametrization and partial pooling across individuals to estimate the parameters.
+
+### Model in Stan code
+
+```{r}
+cat(file = 'model_apis_SVP.stan', 
+    '
+    data{
+      int N;
+      int N_ind;
+      array[N] int pollen;
+      array[N] int ind_id;
+    }
+    
+    parameters{
+      vector[N_ind] z_alpha;
+      real mu;
+      real<lower = 0> sigma;
+      real<lower = 0> phi;
+    }
+    
+    transformed parameters{
+      vector[N_ind] alpha;
+      alpha = mu + z_alpha * sigma;
+    }
+    
+    model {
+      vector[N] lambda;
+      z_alpha ~ normal(0, 1);
+      mu ~ normal(3, 0.5);
+      sigma ~ exponential(1);
+      phi ~ exponential(1);
+      
+      for (i in 1:N){
+        lambda[i] = alpha[ind_id[i]];
+        lambda[i] = exp(lambda[i]);
+      }
+      
+      pollen ~ neg_binomial_2(lambda, phi);
+    }
+    
+    generated quantities{
+      vector[N] log_lik;
+      array[N] int ppcheck;
+      vector[N] lambda1;
+    
+      for (i in 1:N){
+        lambda1[i] = alpha[ind_id[i]];
+        lambda1[i] = exp(lambda1[i]);
+      }
+    
+      for (i in 1:N) log_lik[i] = neg_binomial_2_lpmf(pollen[i] | lambda1[i], phi);
+    
+      ppcheck = neg_binomial_2_rng(lambda1, phi);
+      
+    }
+    ')
+
+```
+
+### Running MCMC algorith and model's outputs
+
+```{r, warning=FALSE, message=FALSE, error=FALSE}
+file <- paste(getwd(), '/model_apis_SVP.stan', sep = '')
+fit_apis_svp <- cmdstan_model(file, compile = T)
+
+model_apis_svp <- 
+  fit_apis_svp$sample(
+    data = dat_apis, 
+    chains = 3, 
+    iter_sampling = 10e3, 
+    iter_warmup = 500, 
+    parallel_chains = 3, 
+    thin = 3, 
+    refresh = 200, 
+    seed = 123
+  )
+
+```
+
+### Model's diagnostics
+
+```{r}
+out_put_apis_svp <- model_apis_svp$summary()
+
+mod_diagnostics(model_apis_svp, out_put_apis_svp)
+
+model_apis_svp$summary()
+
+par(mfrow = c(3, 3), mar = c(4, 4, 1, 1))
+for (i in 1:9) trace_plot(model_apis_svp, out_put_apis_svp$variable[i], 3)
+par(mfrow = c(1, 1))
+
+```
+
+### Model's ppcheck
+
+```{r}
+post_apis_svp <- model_apis_svp$draws(format = 'df')[-1]
+post_apis_svp$mu <- exp(post_apis_svp$mu)
+
+pp_check_svp <- model_apis_svp$draws(variables = 'ppcheck', format = 'matrix')
+  
+plot(density(pp_check_svp[1, ]), lwd = 0.1, main = '', 
+     xlab = 'Single visit pollen deposition', ylim = c(0, 0.05))
+for (i in 1:100) lines(density(pp_check_svp[i, ]), lwd = 0.1)
+lines(density(dat_apis$pollen), col = 'red', lwd = 3)
+
+```
+
+## Rate of pollen accumulation after N honeybee visits
+
+We used the the posterior predictive distribution of the model above to conduct simulations recreating the random process of pollen deposition during sequential honeybee visits. We ran 2000 simulations per honeybee visit, considering the visit as a factor with one to n levels. Each simulation can be considered as a flower —2000 flowers per honeybee visit level— whose stigmatic pollen load is the additive result of random pollen deposition after n honeybee visits. The purpose of this simulations was generate data to estimate the rate of increase of pollen deposition.
+
+This simulation assume that pollen grains are added up at each sequential visit and no stigmatic pollen was removed in the process.
+
+
+```{r}
+set.seed(1234)
+sim_visits <- 
+  apply(pp_check_svp[c(sample(1:nrow(pp_check_svp), size = 100, replace = F)),], 1, 
+        simplify = 'list', FUN = 
+          # looping over posterior predictive distributions of single-visit
+          # pollen deposition
+          function(x) {
+            
+            df_2 <- tibble()
+              
+            for (j in 1:10) { # simulating ten consecutive visits 
+              
+              sum_vis <- 
+                sapply(1:2e3, FUN = # 2000 samples per visit to
+                         function(k) { # sum random values of pollen deposition
+                           sum(sample(x, size = j, T))
+                         })
+              
+              df_ <- tibble(poll_ac = sum_vis,
+                            vis = j)
+              
+              df_2 <- rbind(df_2, df_)
+              
+            }
+            df_2[sample(1:nrow(df_2), size = 200, replace = F), ]
+          })
+
+names(sim_visits) <- paste('sim', 1:length(sim_visits))
+
+for (i in seq_along(sim_visits)) {
+  sim_visits[[i]]$sim <- rep(paste('sim', i), nrow(sim_visits[[i]]))
+}
+
+sim_visits <- do.call('rbind', sim_visits)
+
+sim_visits <- lapply(sim_visits[1:2], function(x) x)
+
+sim_visits$N <- length(sim_visits$poll_ac)
+
+sim_visits %$% plot(vis + rnorm(1e4, 0.1, 0.1), poll_ac, cex = 0.1, 
+                    xlab = 'Number of honeybee visits', 
+                    ylab = 'Pollen deposition', 
+                    ylim = c(0, 600))
+points(1:10, 
+       tapply(sim_visits$poll_ac, sim_visits$vis, FUN = mean), 
+       col = 'red', pch = 15)
+abline(h = c(112, 274), lty = 2, col = 'red')
+text(x = 2, y = 300, 'Optimal pollination')
+
+```
+
+We use this simulate data to estimate the rate of increase (i.e. slope in a linear model). It will be used to parametrize an asymptotic exponential function to predict pollen deposition in blueberry flowers after *N* honeybee visits.
+
+Lest estimate the slope using a model
+
+```{r, eval =FALSE}
+
+cat(file = 'slope_svp_apis.stan', 
+    '
+    data{
+      int N;
+      array[N] int poll_ac;
+      array[N] int vis;
+    }
+    
+    parameters{
+      real alpha;
+      real beta;
+      real<lower = 0> sigma;
+    }
+    
+    model{
+      vector[N] lambda;
+      alpha ~ normal(20, 5);
+      beta ~ normal(3, 0.5);
+      sigma ~ exponential(1);
+    
+      for (i in 1:N) {
+        lambda[i] = alpha + beta*vis[i];
+        lambda[i] = exp(lambda[i]);
+      }
+    
+      poll_ac ~ neg_binomial_2(lambda, sigma);
+    }
+    
+    generated quantities{
+      vector[N] lambda1;
+      array[N] int ppcheck;
+      vector[N] log_lik;
+     
+      for (i in 1:N) {
+        lambda1[i] = alpha + beta*vis[i];
+        lambda1[i] = exp(lambda1[i]);
+      }
+    
+      for (i in 1:N) log_lik[i] = neg_binomial_2_lpmf(poll_ac[i] | lambda1[i], sigma);
+    
+      ppcheck = neg_binomial_2_rng(lambda1, sigma);
+    }
+    
+    ')
+
+file <- paste(getwd(), '/slope_svp_apis.stan', sep = '')
+
+fit_svp_slope <- cmdstan_model(file, compile = T)
+
+mod_svp_slope <- 
+  fit_svp_slope$sample(
+    data = sim_visits, 
+    chains = 3,
+    parallel_chains = 3, 
+    iter_sampling = 2e3, 
+    iter_warmup = 500, 
+    thin = 3,
+    refresh = 200, 
+    seed = 123
+  )
+
+```
+
+```{r}
+
+mod_svp_slope <- readRDS('mod_svp_slope.rds')
+
+post_svp_slope <- mod_svp_slope$draws(variables = c('alpha', 'beta'), format = 'df')
+
+ppcheck_slope <- 
+  sapply(1:length(sim_visits$vis), FUN = 
+           function(i) {
+             
+             x <- sim_visits$vis[i]
+             
+             lambda <- 
+               post_svp_slope$alpha +
+               post_svp_slope$beta*x
+             
+             rnbinom(100, 
+                     mu = exp(lambda),
+                     size = post_svp_slope$alpha)
+           })
+
+plot(NULL, lwd = 0.1, main = '', 
+     xlab = 'Single visit pollen deposition', 
+     xlim = c(0, 600), ylim = c(0, 0.007), ylab = 'Density')
+for (i in 1:50) lines(density(ppcheck_slope[i, ]), lwd = 0.1)
+lines(density(sim_visits$poll_ac), col = 'red')
+
+```
+
+ppcheck ok!
+
+```{r}
+
+```
+
 
 # (v) Final crop yield
 

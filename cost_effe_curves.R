@@ -1338,6 +1338,10 @@ mod_svp_slope <-
     seed = 123
   )
 
+mod_svp_slope$save_object('mod_svp_slope.rds')
+
+mod_svp_slope <- readRDS('mod_svp_slope.rds')
+
 # output_mod_slope <- mod_svp_slope$summary()
 # 
 # mod_diagnostics(mod_svp_slope, output_mod_slope)
@@ -1362,7 +1366,7 @@ ppcheck_slope <-
              
              rnbinom(100, 
                      mu = exp(lambda),
-                     size = exp(post_svp_slope$alpha))
+                     size = post_svp_slope$alpha)
            })
 ppcheck_slope2 <- mod_svp_slope$draws(variables = 'ppcheck', format = 'matrix')
 
