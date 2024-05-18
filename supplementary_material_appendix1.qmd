@@ -413,6 +413,7 @@ $$
 & \sigma_\alpha \sim exponential(1) \\
 & \sigma_\theta \sim exponential(1) \\
 & \sigma_\delta \sim exponential(1) \\
+& \sigma \sim exponential(1) \\
 
 \end{align}
 $$
@@ -575,7 +576,7 @@ plot(density(total_fruts), xlab = 'Fruits produced per\n blueberry bush',
 
 ```
 
-## Total fruits produced by the plant
+## Total flowers produced by the plant
 
 ```{r}
 set.seed(123)
@@ -594,6 +595,7 @@ plot(density(rbeta(2e3, 6, 4)),
      xlab = 'Flowering proportion', ylab = '',
      lwd = 4, col = 'lightblue', main = '')
 
+(p_01ha <- round((1501 * 1)/0.45)) # plant of emerald per ha 
 ```
 
 # (ii) Hives and bees
@@ -740,6 +742,7 @@ $$
 & \mu_\alpha \sim normal(5, 1.5) \\
 & Z_\alpha \sim normal(0, 1) \\
 & \sigma_\alpha \sim exponential(1) \\
+& \sigma \sim exponential(3) \\
 \end{align}
 $$
 
@@ -968,6 +971,7 @@ $$
 & \mu_\alpha \sim normal(3, 0.5) \\
 & Z_\alpha \sim normal(0, 1) \\
 & \sigma_\alpha \sim exponential(1) \\
+& \sigma \sim exponential(1) \\
 
 \end{align}
 $$
@@ -1240,10 +1244,2242 @@ lines(density(sim_visits$poll_ac), col = 'red')
 
 ppcheck ok!
 
+## Stigma saturation
+
+During the 2021 bloom season (July – August) of Northwestern Argentina, we selected three farms to evaluate blueberry pollen deposition. In these farms growers manage pollination service by deploying honeybee hives during bloom season. At each farm we chose five to six plots (Emerald cultivar, plot size 1.31 $\pm$ 0.09 ha) distributed along different spatial contexts within the farm (i.e. from farm border to interior) to encompass the breadth of underlying variation in potential pollination services, as well as soil condition, irrigation system and plant age (Appendix 1 Figure S1b). The average nearest distance among plots within the same farms was 384.4 $\pm$ 197.5 m. Then, we randomly selected five plants within each plot. After flower anthesis, we collected three styles per sampled plant ($N_{total} = 240$), and stored them in an Eppendorf tube with 70% ethanol. In the laboratory, we did a transversal cut of the style at the stigma height and placed it on a microscope slide, from which we covered the stigma with a drop of Alexander’s staining. This was then pressed over with a coverslip, and we counted the number of pollen grains using a microscope as a measure of stigmatic pollen load.
+
+We also use data from pollen deposition experiments in Snowchaser cultivar in one of the sampled farm (see section 5.1 below), and included stigmas from free pollination treatment for the analysis.
+
+We merged both data sets and fitted a model to estimate overall pollen deposition in blueberry flowers and the expected saturation level of the stigma.
+
+## Data wrangling 
+
 ```{r}
+pollen_fruit <- readRDS('datos_experimento.rds')
+pollen_fruit <- pollen_fruit[, c('planta', "tratamiento", "fruto_diam", 
+                                 "carga_poli", "carga_poli2")]
+
+# pollen_surpass <- read_xlsx('D:/github_repos/cap4_phd/all_data.xlsx', 
+#                       sheet = 7, na = 'NA')[, -2]
+
+pollen_surpass <- read_xlsx('/Users/andres/Documents/github_repos/cap4_phd/all_data.xlsx', 
+                            sheet = 7, na = 'NA')[, -2]
+
+dat_asymptote_pollen <- as_tibble(pollen_fruit[pollen_fruit$tratamiento == 'l', ])
+
+dat_asymptote_pollen$farm <- 'sta_lu'
+dat_asymptote_pollen$plant_id <- dat_asymptote_pollen %$% paste(farm, planta, sep = '')
+
+pollen_surpass$plant <- pollen_surpass %$% paste(farm, plant, sep = '')
+pollen_surpass$cultivar <- 'eme'
+
+dat_asymptote_pollen <- 
+  dat_asymptote_pollen |>
+  select(farm, plant_id, carga_poli) |> 
+  mutate(cultivar = 'sch')
+
+colnames(dat_asymptote_pollen) <- colnames(pollen_surpass)
+
+dat_asymptote_pollen <- rbind(dat_asymptote_pollen, 
+                              pollen_surpass[!is.na(pollen_surpass$no_polen),])
+
+levels(as.factor(dat_asymptote_pollen$cultivar))
+
+dat_asymptote_pollen <- 
+  lapply(dat_asymptote_pollen, function(x) if(!is.double(x)) as.integer(as.factor(x)) else(x))
+
+dat_asymptote_pollen$N <- length(dat_asymptote_pollen$farm)
+dat_asymptote_pollen$N_cultivar <- 2
+dat_asymptote_pollen$N_plant <- max(dat_asymptote_pollen$plant)
+dat_asymptote_pollen$N_farm <- max(dat_asymptote_pollen$farm)
+
+```
+
+## Model pollen deposition in blueberry fowers
+
+### Matematical version
+
+$$
+\begin{align}
+
+& stigmatic~pollen~load_i \sim negative~binomial(\lambda_i, \sigma) \\
+& log(\lambda_i) = \tau_{cultivar~i} + \theta_{farm~i} + \alpha_{plant~i} \\
+& \tau_{cultivar~i} = \mu_\tau + Z_\tau \times \sigma_\tau\\ 
+& \theta_{farm~i} = \mu_\theta + Z_\theta \times \sigma_\theta\\ 
+& \alpha_{plant~i} = \mu_\alpha + Z_\alpha \times \sigma_\alpha\\ 
+& \mu_\tau \sim normal(5, 0.5) \\
+& \mu_\theta \sim normal(0, 1) \\
+& \mu_\alpha \sim normal(0, 1) \\
+& Z_\tau \sim normal(0, 1) \\
+& Z_\theta \sim normal(0, 1) \\
+& Z_\alpha \sim normal(0, 1) \\
+& \sigma_\tau \sim exponential(1) \\
+& \sigma_\theta \sim exponential(1) \\
+& \sigma_\alpha \sim exponential(1) \\
+& \sigma \sim exponential(1) \\
+
+\end{align}
+$$
+We used $\tau$ as the intercept, and $\mu_\tau \sim normal(5, 0.5)$ distribution since encompass the expected average value of pollen deposition. The $normal(0, 1)$ and $exponential(1)$ are standard priors for group level effects and disperssion parameters. We ffited the model using a non-centered parametrization and partial pooling among clusters (i.e. plants, farms and cultivars). 
+
+### Model in Stan code
+```{r}
+cat(file = 'asymptote_pollen1.stan', 
+    '
+    data{
+      int N;
+      int N_cultivar;
+      int N_plant;
+      int N_farm;
+      array[N] int farm;
+      array[N] int plant;
+      array[N] int no_polen;
+      array[N] int cultivar;
+    }
+    
+    parameters{
+      vector[N_plant] z_alpha;
+      real mu_alpha;
+      real<lower = 0> sigma_alpha;
+    
+      vector[N_farm] z_theta;
+      real mu_theta;
+      real<lower = 0> sigma_theta;
+    
+      vector[N_cultivar] z_tau;
+      real mu_tau;
+      real<lower = 0> sigma_tau;
+    
+      real<lower = 0> scale;
+    }
+    
+    transformed parameters{
+      vector[N_plant] alpha;
+      vector[N_farm] theta;
+      vector[N_cultivar] tau;
+    
+      alpha = mu_alpha + z_alpha*sigma_alpha;
+      tau = mu_tau + z_tau * sigma_tau;
+      theta = mu_theta + z_theta * sigma_theta;
+    }
+    
+    model{
+      vector[N] mu;
+      z_alpha ~ normal(0, 1);
+      mu_alpha ~ normal(0, 1);
+      sigma_alpha ~ exponential(1);
+    
+      z_theta ~ normal(0, 1);
+      mu_theta ~ normal(0, 1);
+      sigma_theta ~ exponential(1);
+    
+      z_tau ~ normal(0, 1);
+      mu_tau ~ normal(5, 0.5);
+      sigma_tau ~ exponential(1);
+    
+      scale ~ exponential(1);
+    
+      for (i in 1:N){
+        mu[i] = tau[cultivar[i]] + theta[farm[i]] + alpha[plant[i]];
+        mu[i] = exp(mu[i]);
+      }
+    
+      no_polen ~ neg_binomial_2(mu, scale);
+    }
+    
+    generated quantities{
+      vector[N] log_lik;
+      vector[N] mu1;
+      array[N] int ppcheck;
+    
+      for (i in 1:N){
+        mu1[i] = tau[cultivar[i]] + theta[farm[i]] + alpha[plant[i]];
+        mu1[i] = exp(mu1[i]);
+      }
+    
+      for (i in 1:N) log_lik[i] = neg_binomial_2_lpmf(no_polen[i] | mu1[i], scale);
+      
+      ppcheck = neg_binomial_2_rng(mu1, scale);
+    }
+    ')
+
+```
+
+### Running MCMC algorith and model's outputs
+
+```{r, message=FALSE, warning=FALSE, error=FALSE}
+file <- paste(getwd(), '/asymptote_pollen1.stan', sep = '')
+fit_asymtote_pollen <- cmdstan_model(file, compile = T)
+
+mod_asymptote_pollen <- 
+  fit_asymtote_pollen$sample(
+    data = dat_asymptote_pollen, 
+    chains = 3, 
+    parallel_chains = 3, 
+    iter_sampling = 4e3,
+    iter_warmup = 500, 
+    thin = 3, 
+    refresh = 500, 
+    seed = 123
+  )
+
+```
+
+### Model's diagnostics
+
+```{r}
+out_asymptote_pollen <- mod_asymptote_pollen$summary()
+
+mod_diagnostics(mod_asymptote_pollen, out_asymptote_pollen)
+
+```
+
+### Model's ppcheck
+
+```{r}
+
+ppcheck_asymptote_pol <- mod_asymptote_pollen$draws(variables = 
+                                                      'ppcheck', 
+                                                    format = 'matrix')
+
+plot(density(ppcheck_asymptote_pol[1, ]), ylab = 'Density', 
+     xlab = 'Pollen load', main = '', ylim = c(0, 0.009))
+for (i in 1:100) lines(density(ppcheck_asymptote_pol[i, ], lwd = 0.1))
+lines(density(dat_asymptote_pollen$no_polen), col = 'red', lwd = 2)
+```
+
+### Saturation level of the stigma
+
+We used posterior predictive distributions of stigmatic pollen deposition for each cultivar, to estimate cumulative distribution functions and approximate the saturation point.
+
+```{r}
+post_asymptote <- 
+  mod_asymptote_pollen$draws(variables = 
+                               c('alpha', 'theta', 'tau', 'scale'), 
+                             format = 'df')
+
+post_asymptote <- 
+  list(plant = post_asymptote[, grepl('alpha', colnames(post_asymptote)), ], 
+       farm = post_asymptote[, grepl('theta', colnames(post_asymptote)), ], 
+       cultivar = post_asymptote[, grepl('tau', colnames(post_asymptote)), ],
+       scale = post_asymptote[, grepl('scale', colnames(post_asymptote)), ])
+
+
+
+sch <- with(post_asymptote, {
+                 cultivar[, 2, drop = T] +
+                   apply(plant, 1, mean) + 
+                   apply(farm, 1, mean)
+               })
+  
+sch <- replicate(100, 
+                 rnbinom(1000, size = post_asymptote$scale$scale, 
+                         mu = exp(sch)))
+
+eme <- with(post_asymptote, {
+                 cultivar[, 1, drop = T] +
+                 apply(plant, 1, mean) + 
+                 apply(farm, 1, mean)
+              })
+
+eme <- replicate(100, 
+                 rnbinom(1000, size = post_asymptote$scale$scale, 
+                         mu = exp(eme)))
+
+plot(NULL, xlim = c(0, 450), ylim = c(0, 1), 
+     xlab = 'Pollen load', ylab = 'eCDF')
+for (i in 1:100) lines(ecdf(sch[, i]), col = 'lightblue')
+for (i in 1:100) lines(ecdf(eme[, i]), col = 'tan')
+abline(v = c(225, 250, 275), lty = c(2, 3, 2), col = 'red') # Aproximate level of saturation
+
+```
+
+We used this approximated value to parametrize the asymptote of the exponential growth function describing stigmatic pollen deposition in blueberries after N honeybee sequential visits.
+
+## Pollen deposition after N honeybee visits
+
+```{r}
+mu_asintota <- 250
+asymptote <- rnorm(length(post_svp_slope$beta), mu_asintota, 15)
+slope <- post_svp_slope$beta
+
+par(mar = c(4, 4, 1, 1))
+plot(NULL, xlim = c(0, 30), ylim = c(0, 320), xlab = 'Honeybee visits', 
+     ylab = 'Stigmatic pollen deposition')
+for (i in 1:200) curve(asymptote[i]*(1-exp(-slope[i]*x)), 
+                       add = T, lwd = 0.1)
+curve(mean(asymptote)*(1-exp(-mean(slope)*x)), 
+      add = T, lwd = 2, col = 'red')
+
+```
+
+Finally, the function `pollen_deposition_fun` simulate pollen deposition in blueberry flowers after N honeybee visits
+
+```{r}
+pollen_deposition_fun <- function(x, # number of flower visits to the flower
+                                  mu_est = T, # if TRUE, the function uses
+                                              # average value of parameters. if
+                                              # FALSE, it uses random values from
+                                              # the distributions 
+                                  beta = slope, # slope parameter
+                                  theta = asymptote) { # asymptotic parameter
+  if (mu_est) {
+    # setting average values of the parameters
+    a <- mean(theta) 
+    b <- mean(beta)
+    
+    return(round(a * (1-exp(-b*x))))
+  } else {
+    # random value from de distribution of each parameter
+    a <- sample(theta, 1, T)
+    b <- sample(beta, 1, T)
+    
+    return(round(a * (1-exp(-b*x))))
+  }
+}
+
+pollen_deposition_fun <- cmpfun(pollen_deposition_fun)
+```
+
+# (v) Final crop yield
+
+## Data collection: berry diameter and pollen deposition
+
+We conducted a field experiment to maximize variation in stigmatic pollen load and determine the effects of pollen deposition on blueberry fruit size. We randomly selected 20 plants of Snowchaser cultivar and selected four flowering branches for each plant that were similar in orientation, size and number of flowers. On these branches, we applied four treatments: 1) *pollination exclusion* – this treatment consisted of a nylon mesh bag surrounding the flowers to prevent animal pollination; 2) *partial pollination* – the flowers were excluded with a mesh bag, but hand-pollinated once with a brush; 3) *free pollination* – the flowers were exposed to natural pollination; 4) *supplemented pollination* – the flowers were exposed to natural pollination, but were also hand-pollinated once. Pollen used for hand-pollination was collected with a mechanical hand pollinator ($VegiBee^{TM}$, vegibee.com) that sonicates flowers and releases pollen from flowers of randomly chosen plants. We monitored three flowers per treatment on each plant by labeling them with numbered tags attached to the pedicel ($N_{total}$ = 240 flowers). After flower anthesis, when the extraction of the style has no effect on the probability of the flower setting fruit, we collected each style and stored it in an Eppendorf tube containing 70% ethanol. In the laboratory, we did a transversal cut of the style at the stigma height and placed it on a microscope slide. We then covered the stigma with a drop of Alexander’s stain (Alexander, 1969), crushed it with a coverslip and counted the pollen grains under a microscope. When the fruits were fully mature, we collected them and measured the equatorial diameter with a caliper of 0.05 mm accuracy.
+
+## Data wrangling 
+
+The first part involves a model of fruit diameter of three cultivars to estimate the contrast among them (i.e. size differences). It was necessary since the the following fruit weight estimation from fruit diameter (see section ... ) was conducted using Emerald's data.
+```{r}
+
+snow <- as_tibble(readRDS('datos_experimento.rds'))
+snow <- snow[, c("planta", "tratamiento", "carga_poli", "fruto_diam")]
+snow$farm <- 'sta_lu'
+snow <- snow[snow$tratamiento == 'l', ]
+snow$plant_id <- snow %$% paste(planta, tratamiento, sep = '')
+snow$variedad <- 'sch'
+snow1 <- snow[, c("farm", "plant_id", "variedad", "fruto_diam")]
+colnames(snow1) <- c('farm', 'plant_id', 'cultivar', 'fruit_diam')
+
+emerald <- readRDS('fruit_size.rds')
+emerald <- emerald[, c("year", "farm", "plant", 
+                       "fruit_diameter", "fruit_weight")]
+emerald$plant_id <- emerald %$% paste(plant, farm, sep = '')
+for (i in 1:2) emerald[[i]] <- as.factor(emerald[[i]])
+emerald$variedad <- 'eme'
+emerald1 <- emerald[, c('farm', "plant_id", "variedad", "fruit_diameter")]
+colnames(emerald1) <- colnames(snow1)
+
+pri_sj <- as_tibble(read.csv2('calidad_frutoPRI_SJ.csv', header = T, sep = ';'))
+pri_sj$plant_id <- pri_sj %$% paste(finca, planta, sep = '')
+pri_sj1 <- pri_sj[, c("finca", "plant_id", "variedad", "diamF")]
+colnames(pri_sj1) <- colnames(snow1)
+
+fruit_size_cultivars <- rbind(snow1, emerald1, pri_sj1)
+
+fruit_size_cultivars[] <- 
+  lapply(fruit_size_cultivars, function(x) if(!is.numeric(x)) as.factor(x) else(x))
+
+fruit_size_cultivars <- 
+  fruit_size_cultivars[fruit_size_cultivars$fruit_diam > 2, ]
+
+dat_fru_size <- 
+  lapply(fruit_size_cultivars[!is.na(fruit_size_cultivars$fruit_diam), ], 
+         function(x) if(!is.numeric(x)) as.integer(x) else(x))
+
+dat_fru_size$N <- length(dat_fru_size$farm)
+dat_fru_size$N_plants <- max(dat_fru_size$plant_id)
+dat_fru_size$N_cultivars <- max(dat_fru_size$cultivar)
+dat_fru_size$N_farms <- max(dat_fru_size$farm)
+
+```
+
+## Model fruit size differences among cultivars
+mu[i] = alpha[cultivar[i]] + theta[plant_id[i]] + tau[farm[i]];
+### Matematical version 
+
+$$
+\begin{align}
+
+& berry~diameter_i \sim normal(\mu_i, \sigma) \\
+& \mu_i = \alpha_{cultivar~i} + \theta_{plant~i} + \tau_{farm~i} \\
+& \alpha_{cultivar~i} = \mu_\alpha + Z_\alpha \times \sigma_\alpha \\
+& \theta_{plant~i} = \mu_\theta + Z_\theta \times \sigma_\theta \\
+& \tau_{farm~i} = \mu_\tau + Z_\tau \times \sigma_\tau \\
+& \mu_\alpha \sim normal(15, 2.5) \\
+& \mu_\theta \sim normal(0, 1) \\
+& \mu_\tau \sim normal(0, 1) \\
+& Z_\alpha \sim normal(0, 1) \\
+& Z_\theta \sim normal(0, 1) \\
+& Z_\tau \sim normal(0, 1) \\
+& \sigma_\alpha \sim exponential(1) \\
+& \sigma_\theta \sim exponential(1) \\
+& \sigma_\tau \sim exponential(1) \\
+& \sigma \sim exponential(1) \\
+\end{align}
+$$
+We use $\alpha$ as the model's intercept and $\mu_\alpha \sim normal(15, 2.5)$ prior since encompass the expected diameter of a blueberry fruit. We used a non-centered parametrization and partial pooling to estimate the parameters.
+
+### Model in Stan code
+
+```{r}
+cat(file = 'fruit_size_comp.stan', 
+    '
+    data{
+      int N;
+      int N_cultivars;
+      int N_plants;
+      int N_farms;
+      vector[N] fruit_diam;
+      array[N] int cultivar;
+      array[N] int plant_id;
+      array[N] int farm;
+    }
+    
+    parameters{
+      vector[N_cultivars] z_alpha;
+      real mu_alpha;
+      real<lower = 0> sigma_alpha;
+    
+      vector[N_plants] z_theta;
+      real mu_theta;
+      real<lower = 0> sigma_theta;
+    
+      vector[N_farms] z_tau;
+      real mu_tau;
+      real<lower = 0> sigma_tau;
+    
+      real<lower = 0> sigma;
+    }
+    
+    transformed parameters{
+      vector[N_cultivars] alpha;
+      vector[N_plants] theta;
+      vector[N_farms] tau;
+    
+      alpha = mu_alpha + z_alpha * sigma_alpha;
+      theta = mu_theta + z_theta * sigma_theta;
+      tau = mu_tau + z_tau * sigma_tau;
+    }
+    
+    model{
+      vector[N] mu;
+      sigma ~ exponential(1);
+    
+      z_alpha ~ normal(0, 1);
+      mu_alpha ~ normal(15, 2.5);
+      sigma_alpha ~ exponential(1);
+    
+      z_theta ~ normal(0, 1);
+      mu_theta ~ normal(0, 1);
+      sigma_theta ~ exponential(1);
+    
+      z_tau ~ normal(0, 1);
+      mu_tau ~ normal(0, 1);
+      sigma_tau ~ exponential(1);
+    
+      for (i in 1:N){
+        mu[i] = alpha[cultivar[i]] + theta[plant_id[i]] + tau[farm[i]];
+      }
+    
+      fruit_diam ~ normal(mu, sigma);
+    }
+    
+    generated quantities{
+      vector[N] log_lik;
+      vector[N] mu1;
+      array[N] real ppcheck;
+    
+      for (i in 1:N){
+        mu1[i] = alpha[cultivar[i]] + theta[plant_id[i]] + tau[farm[i]];
+      }
+    
+      for (i in 1:N) log_lik[i] = normal_lpdf(fruit_diam[i] | mu1[i], sigma);
+    
+      ppcheck = normal_rng(mu1, sigma);
+    }
+    ')
+```
+
+### Running MCMC algorithm 
+
+```{r, eval=FALSE}
+file <- paste(getwd(), '/fruit_size_comp.stan', sep = '')
+fit_fruit_size <- cmdstan_model(file, compile = T)
+
+mod_fruit_size <- 
+  fit_fruit_size$sample(
+    data = dat_fru_size,
+    iter_sampling = 4e3,
+    iter_warmup = 500,
+    chains = 3,
+    parallel_chains = 3,
+    thin = 3,
+    refresh = 500,
+    seed = 123
+  )
+```
+
+### Model's diagnostics
+
+```{r}
+
+mod_fruit_size <- readRDS('mod_fruit_size.rds')
+
+ppcheck_fruit_size <- mod_fruit_size$draws('ppcheck', format = 'matrix')
+
+plot(density(ppcheck_fruit_size[1, ]), xlab = 'fruit size (mm)', 
+     ylab = 'Density', main = '', lwd = 0.1, ylim = c(0, 0.25))
+for (i in 1:500) lines(density(ppcheck_fruit_size[i, ]), lwd = 0.1)
+lines(density(dat_fru_size$fruit_diam), col = 'red', lwd = 1.5)
+```
+
+### Contrast of ruit size
+
+We used posterior predictive distributions of fruit size for all cultivars to estimate the contrast (here we included other cultivars, but only emerald and snowchaser are used in the following analyses).
+```{r, fig.cap= 'sch = snowchaser; eme = emerald; pri = primadona; sj = san joaquin'}
+post_fruit_size <- mod_fruit_size$draws(c('alpha', 'theta', 'tau', 'sigma'), 
+                                        format = 'df')
+
+post_fruit_size <- 
+  list(
+    cultivar = post_fruit_size[, grepl('alpha', colnames(post_fruit_size))],
+    plant = post_fruit_size[, grepl('theta', colnames(post_fruit_size))],
+    farm = post_fruit_size[, grepl('tau', colnames(post_fruit_size))],
+    sigma = post_fruit_size[, grepl('sigma', colnames(post_fruit_size))]
+  )
+
+levels(fruit_size_cultivars$cultivar)
+
+fruits_sim <- 
+  lapply(1:4, FUN = 
+           function(x) {
+             
+             cult <- levels(fruit_size_cultivars$cultivar)[x]
+             
+             mu <- 
+               with(post_fruit_size, 
+                    {
+                      cultivar[, x, drop = T] +
+                        apply(plant, 1, mean) +
+                        apply(farm, 1, mean)
+                    })
+             replicate(1e3, rnorm(1e3, mu, post_fruit_size$sigma$sigma))
+           })
+
+names(fruits_sim) <- levels(fruit_size_cultivars$cultivar)
+
+fruits_sim <- lapply(c(1, 2, 4), FUN = 
+                       function(x) {
+                         
+                         sapply(1:100, FUN = 
+                                  function(i) {
+                                    
+                                    fruits_sim[[x]][, i] - 
+                                      fruits_sim[[3]][, i]
+                                    
+                                  }, simplify = 'array')
+                       })
+
+names(fruits_sim) <- levels(fruit_size_cultivars$cultivar)[-3]
+
+par(mfrow = c(2, 2), mar = c(4.2, 4.2, 1, 1))
+
+for (i in 1:3) {
+  
+  plot(density(fruits_sim[[i]][, 1]), lwd = 0.1, 
+       xlab = paste('contrast sch - ', names(fruits_sim)[i]), 
+       main = '', col = i, ylim = c(0, 0.25))
+  
+  for (j in 1:100) lines(density(fruits_sim[[i]][, j]), col = i, lwd = 0.1)
+  
+}
+par(mfrow = c(1, 1))
+```
+
+## Model fruit size as function of pollen deposition
+
+```{r}
+fruits_sim <- 
+  lapply(fruits_sim, FUN = 
+           function(x) apply(x, 2, mean))
+
+snow <- readRDS('datos_experimento.rds')
+
+colnames(snow)[10] <- 'fruit_sch'
+# including random values of the contrast for each cultivar
+snow$fruit_eme <- snow$fruit_sch + sample(fruits_sim$eme, nrow(snow), T)
+snow$fruit_sj <- snow$fruit_sch + sample(fruits_sim$sj, nrow(snow), T)
+snow$fruit_pri <- snow$fruit_sch + sample(fruits_sim$pri, nrow(snow), T)
+
+snow <- 
+  as_tibble(snow[, c(6, grep('fruit', colnames(snow)))])
+
+snow$carga_poli_z <- as.vector(scale(snow$carga_poli))
+
+dat_pollen_fun <- lapply(snow, function(x) x)
+dat_pollen_fun$N <- nrow(snow)
+
+```
+
+### Matematical version
+
+$$
+\begin{align}
+
+& diameter~of~fruit_i \sim normal(\mu_i, \sigma) \\
+& \mu_i = \frac{\theta}{1+e^{-(\phi + \tau \times pollen~deposition_i)}} \\
+& \theta \sim normal(17, 2) \\
+& \phi \sim normal(0, 1) \\
+& \tau \sim normal(0, 1) \\
+& \sigma \sim exponential(1) \\
+
+\end{align}
+$$
+
+### Model in Stan code
+
+```{r}
+cat(file = 'pollen_function.stan', 
+    '
+    data{
+      int N;
+      vector[N] carga_poli;
+      vector[N] fruit_sch;
+      vector[N] fruit_eme;
+      vector[N] fruit_pri;
+      vector[N] fruit_sj;
+    }
+    
+    parameters{
+      real alpha_sch;
+      real phi1_sch;
+      real phi2_sch;
+      real<lower = 0> sigma_sch;
+    
+      real alpha_pri;
+      real phi1_pri;
+      real phi2_pri;
+      real<lower = 0> sigma_pri;
+    
+      real alpha_eme;
+      real phi1_eme;
+      real phi2_eme;
+      real<lower = 0> sigma_eme;
+    
+      real alpha_sj;
+      real phi1_sj;
+      real phi2_sj;
+      real<lower = 0> sigma_sj;
+    }
+    
+    model{
+    
+      // model snowchaser
+      vector[N] mu_sch;
+      alpha_sch ~ normal(17, 2);
+      phi1_sch ~ normal(0, 1);
+      phi2_sch ~ normal(0, 1);
+      sigma_sch ~ exponential(1);
+      
+      for (i in 1:N) { 
+        mu_sch[i] = alpha_sch/(1+exp(-(phi1_sch + phi2_sch * carga_poli[i])));
+      }
+    
+      fruit_sch ~ normal(mu_sch, sigma_sch);
+    
+      // model emerald
+      vector[N] mu_eme;
+      alpha_eme ~ normal(17, 2);
+      phi1_eme ~ normal(0, 1);
+      phi2_eme ~ normal(0, 1);
+      sigma_eme ~ exponential(1);
+      
+      for (i in 1:N) { 
+        mu_eme[i] = alpha_eme/(1+exp(-(phi1_eme + phi2_eme * carga_poli[i])));
+      }
+    
+      fruit_eme ~ normal(mu_eme, sigma_eme);
+    
+      // model primadonna
+      vector[N] mu_pri;
+      alpha_pri ~ normal(17, 2);
+      phi1_pri ~ normal(0, 1);
+      phi2_pri ~ normal(0, 1);
+      sigma_pri ~ exponential(1);
+      
+      for (i in 1:N) { 
+        mu_pri[i] = alpha_pri/(1+exp(-(phi1_pri + phi2_pri * carga_poli[i])));
+      }
+    
+      fruit_pri ~ normal(mu_pri, sigma_pri);
+    
+    
+      // model san joaquin
+      vector[N] mu_sj;
+      alpha_sj ~ normal(17, 2);
+      phi1_sj ~ normal(0, 1);
+      phi2_sj ~ normal(0, 1);
+      sigma_sj ~ exponential(1);
+      
+      for (i in 1:N) { 
+        mu_sj[i] = alpha_sj/(1+exp(-(phi1_sj + phi2_sj * carga_poli[i])));
+      }
+    
+      fruit_sj ~ normal(mu_sj, sigma_sj);
+
+    }
+    
+    generated quantities{
+      array[N] real ppcheck_sch;
+      vector[N] mu_sch1;
+      array[N] real ppcheck_pri;
+      vector[N] mu_pri1;
+      array[N] real ppcheck_eme;
+      vector[N] mu_eme1;
+      array[N] real ppcheck_sj;
+      vector[N] mu_sj1;
+      
+      for (i in 1:N) { 
+        mu_sch1[i] = alpha_sch/(1+exp(-(phi1_sch + phi2_sch * carga_poli[i])));
+      }
+    
+      ppcheck_sch = normal_rng(mu_sch1, sigma_sch);
+    
+      for (i in 1:N) { 
+        mu_eme1[i] = alpha_eme/(1+exp(-(phi1_eme + phi2_eme * carga_poli[i])));
+      }
+    
+      ppcheck_eme = normal_rng(mu_eme1, sigma_eme);
+    
+      for (i in 1:N) { 
+        mu_pri1[i] = alpha_pri/(1+exp(-(phi1_pri + phi2_pri * carga_poli[i])));
+      }
+    
+      ppcheck_pri = normal_rng(mu_pri1, sigma_pri);
+    
+      for (i in 1:N) { 
+        mu_sj1[i] = alpha_sj/(1+exp(-(phi1_sj + phi2_sj * carga_poli[i])));
+      }
+    
+      ppcheck_sj = normal_rng(mu_sj1, sigma_sj);
+    }
+    ')
+```
+
+### Running MCMC algorithm
+
+```{r, warning=FALSE, message=FALSE, error=FALSE}
+file <- paste(getwd(), '/pollen_function.stan', sep = '')
+fit_fun_pollen <- cmdstan_model(file, compile = T)
+
+mod_fun_pollen <- 
+  fit_fun_pollen$sample(
+    data = dat_pollen_fun, 
+    iter_sampling = 10e3,
+    iter_warmup = 500,
+    chains = 3,
+    parallel_chains = 3,
+    thin = 3,
+    refresh = 500,
+    seed = 123
+  )
+```
+
+### Model's diagnostics
+
+```{r}
+out_mod_fun <- mod_fun_pollen$summary() 
+
+par(mfrow = c(3, 3))
+for (i in 2:10) trace_plot(mod_fun_pollen, out_mod_fun$variable[i], 3)
+par(mfrow = c(1, 1))
+
+ppcheck_fun_poll <- mod_fun_pollen$draws(c('ppcheck_sch',
+                                           'ppcheck_eme',
+                                           'ppcheck_pri',
+                                           'ppcheck_sj'), format = 'df')
+
+ppcheck_fun_poll <- 
+  list(sch = ppcheck_fun_poll[, grep('sch', colnames(ppcheck_fun_poll))],
+       eme = ppcheck_fun_poll[, grep('eme', colnames(ppcheck_fun_poll))],
+       sj = ppcheck_fun_poll[, grep('sj', colnames(ppcheck_fun_poll))],
+       pri = ppcheck_fun_poll[, grep('pri', colnames(ppcheck_fun_poll))])
+
+ppcheck_fun_poll <- lapply(ppcheck_fun_poll, as.matrix)
+
+names(dat_pollen_fun)
+
+par(mfrow = c(2, 2), mar = c(4, 4, 1, 1))
+
+for (i in 1:4) {
+  plot(density(dat_pollen_fun[[i+1]]), col = 'red', main = '',
+       xlab = paste('Fruit size', names(ppcheck_fun_poll)[i]), 
+       lwd = 0.1)
+  for (j in 1:100) lines(density(ppcheck_fun_poll[[i]][j, ]), lwd = 0.1)
+  lines(density(dat_pollen_fun[[i+1]]), col = 'red', lwd = 1.5)
+}
+
+par(mfrow = c(1, 1))
+
+```
+
+Plotting main effect for Snowchaser cultivar
+
+```{r}
+post_functions <- mod_fun_pollen$draws(out_mod_fun$variable[2:17], 
+                                       format = 'df')
+
+post_functions <- 
+  list(sch = post_functions[, grep('sch', colnames(post_functions))],
+       eme = post_functions[, grep('eme', colnames(post_functions))],
+       sj = post_functions[, grep('sj', colnames(post_functions))],
+       pri = post_functions[, grep('pri', colnames(post_functions))])
+
+z_x <- dat_pollen_fun %$% seq(min(carga_poli), max(carga_poli), 
+                              length.out = 1e3)
+
+par(mar = c(4, 4, 1, 1))
+plot((mean(post_functions$sch[, 1, drop = T])) /
+       (1 + exp(-(mean(post_functions$sch[, 2, drop = T]) +
+                    mean(post_functions$sch[, 3, drop = T]) * z_x))) ~ z_x, 
+     lwd = 0.1, type = 'l', xlim = c(0, 400), 
+     ylim = c(0, 20), xlab = 'Pollen deposition', 
+     ylab = paste('Fruit diameter (mm)'), col = i)
+
+for (j in 1:100) {
+  lines(post_functions$sch[, 1, drop = T][[j]] /
+          (1 + exp(-(post_functions$sch[, 2, drop = T][[j]] +
+                       post_functions$sch[, 3, drop = T][[j]] * z_x))) ~ z_x, 
+        lwd = 0.1, type = 'l', col = i)
+}
+
+points(dat_pollen_fun$carga_poli, dat_pollen_fun$fruit_sch, lwd = 2, 
+       cex = 0.3)
+```
+
+Finally, the function `predict_fruit_size` use the posterior distribution of the previous model to simulate expected fruit size given stigmatic pollen deposition.
+```{r}
+predict_fruit_size <- function(x, # stigmatic pollen load
+                               cultivar = 'sch', # abreviation of the cultivar.
+                               # sch = snowchaser, eme = emerald, sj = san joaquin,
+                               # pri = primadona
+                               mean_est = TRUE, # if TRUE, the function conduct 
+                               # the simulations with the average value only.
+                               # If FALSE, the simulation uses the dispersion
+                               # parameter and the likelihood to generate random values.
+                               seed = 123) {
+  if (length(x) <= 1) {
+    stop(message('x length must be greater than 1'))
+  }
+  df <- post_functions[[grep(cultivar, names(post_functions))]]
+  a <- df[, 1, drop = T]
+  phi1 <- df[, 2, drop = T]
+  phi2 <- df[, 3, drop = T]
+  sigma <- df[, 4, drop = T]
+  zeros <- which(x == 0)
+  non_zeros <- which(x > 0)
+  x_temp <- x[non_zeros]
+  
+  n <- length(x_temp)
+  
+  if (mean_est) {
+    set.seed(seed)
+    a <- sample(a, n, T)
+    set.seed(seed)
+    phi1 <- sample(phi1, n, T)
+    set.seed(seed)
+    phi2 <- sample(phi2, n, T)
+    mu <- a / (1 + exp(-(phi1 + phi2 * x_temp)))
+    
+    out <- mu
+    
+  } else {
+    set.seed(seed)
+    a <- sample(a, n, T)
+    set.seed(seed)
+    phi1 <- sample(phi1, n, T)
+    set.seed(seed)
+    phi2 <- sample(phi2, n, T)
+    set.seed(seed)
+    sigma <- sample(sigma, n, T)
+    
+    mu <- a / (1 + exp(-(phi1 + phi2 * x_temp)))
+    
+    set.seed(seed)
+    out <- rnorm(n, mu, sigma)
+  }
+  x[zeros] <- 0
+  x[non_zeros] <- out
+  return(x)
+}
+
+predict_fruit_size <- cmpfun(predict_fruit_size)
+
+```
+
+Example:
+
+```{r, fig.cap= 'black dotes = "mean_est = T"; red dotes = "mean_est = F"'}
+plot(0:500, predict_fruit_size(0:500, cultivar = 'eme', mean_est = F), col = 2, 
+     main = '', xlab = 'Stigmatic pollen load', ylab = 'Fruit diameter (mm)')
+points(0:500, predict_fruit_size(0:500, cultivar = 'eme', mean_est = T), 
+       pch = 16)
+```
+
+
+## Going from diameter to fruit weight 
+
+### Data collection
+
+During the production seasons of 2020 and 2021, we sampled the size of fruits produced nine blueberry farms of the Northwestern Argentina. To do so, we selected one plot per farm twelve plants/plot. We randomly selected ten mature fruits per sampled plant to measure their equatorial diameter with a 0.05 mm accuracy caliper, and fruit weight with a digital balance of 0.01 g resolution. Using this data we fitted a model to estimate fruit weight as function of the diameter.
+
+
+### Data wrangling
+
+```{r}
+fruit_size <- readRDS('fruit_size.rds')
+
+fruit_size <- fruit_size[fruit_size$fruit_diameter >5, ]
+
+fruit_size <- na.omit(fruit_size[, -ncol(fruit_size)])
+
+fruit_size$plant_id <- fruit_size %$% paste(farm, plant, sep = '_')
+fruit_size$farm <- as.factor(fruit_size$farm)
+fruit_size$plant_id <- as.factor(fruit_size$plant_id)
+fruit_size$year <- as.factor(fruit_size$year)
+
+summary(fruit_size)
+
+dat_size_weight <- 
+  lapply(fruit_size[, c("year", "farm", "fruit_weight", 
+                        "fruit_diameter", "plant_id")], 
+         function(x) if(is.factor(x)) as.integer(x) else(x))
+
+dat_size_weight$N <- length(dat_size_weight$year)
+dat_size_weight$N_year <- max(dat_size_weight$year)
+dat_size_weight$N_farm <- max(dat_size_weight$farm)
+dat_size_weight$N_plant <- max(dat_size_weight$plant_id)
+
+```
+
+### Model fruit weiht ~ fruit diameter
+
+### Matematical version
+
+$$
+\begin{align}
+
+& fruit~weight_i \sim normal(\mu_i, \sigma) \\
+& \mu_i = \alpha_{plant~i} + \theta_{farm~i} + \tau_{year~i} + e^{\beta\times fruit~diameter_i} \\
+& \alpha_{plant~i} = \mu_\alpha + Z_\alpha \times \sigma_\alpha \\
+& \theta_{farm~i} = \mu_\theta + Z_\theta \times \sigma_\theta \\
+& \tau_{year~i} = \mu_\tau + Z_\alpha \tau \sigma_\tau \\
+& \mu_\alpha \sim normal(1.5, 0.5) \\
+& \mu_\theta \sim normal(0, 1) \\
+& \mu_\tau \sim normal(0, 1) \\
+& Z_\alpha \sim normal(0, 1) \\
+& Z_\theta \sim normal(0, 1) \\
+& Z_\tau \sim normal(0, 1) \\
+& \sigma_\alpha \sim exponential(1) \\
+& \sigma_\theta \sim exponential(1) \\
+& \sigma_\tau \sim exponential(1) \\
+& \sigma \sim exponential(1) \\
+
+\end{align}
+$$
+We defined the $\alpha$ parameter as the model's intercept and $normal(1.5, 0.5)$ as prior since encompass the typical weight of of a blueberry fruit. We used using a non-centered parametrization and partial pooling to estimate the parameters.
+
+### Model in Stan code
+
+```{r}
+cat(file = 'diameter_weight.stan', 
+    '
+    data{
+      int N;
+      int N_year;
+      int N_farm;
+      int N_plant;
+      array[N] int year;
+      array[N] int farm;
+      array[N] int plant_id;
+      vector[N] fruit_weight;
+      vector[N] fruit_diameter;
+    }
+    
+    parameters{
+      vector[N_plant] z_alpha;
+      real mu_alpha;
+      real<lower = 0> sigma_alpha;
+    
+      vector[N_farm] z_theta;
+      real mu_theta;
+      real<lower = 0> sigma_theta;
+    
+      vector[N_year] z_tau;
+      real mu_tau;
+      real<lower = 0> sigma_tau;
+    
+      real beta;
+      real<lower = 0> sigma;
+    }
+    
+    transformed parameters{
+      vector[N_plant] alpha;
+      vector[N_farm] theta;
+      vector[N_year] tau;
+      
+      alpha = mu_alpha + z_alpha * sigma_alpha;
+      theta = mu_theta + z_theta * sigma_theta;
+      tau = mu_tau + z_tau * sigma_tau;
+    }
+    
+    model{
+      vector[N] mu;
+      beta ~ lognormal(0, 1);
+      sigma ~ exponential(1);
+      
+      z_alpha ~ normal(0, 1);
+      mu_alpha ~ normal(1.5, 0.25);
+      sigma_alpha ~ exponential(1);
+    
+      z_theta ~ normal(0, 1);
+      mu_theta ~ normal(0, 1);
+      sigma_theta ~ exponential(1);
+    
+      z_tau ~ normal(0, 1);
+      mu_tau ~ normal(0, 1);
+      sigma_tau ~ exponential(1);
+    
+      for (i in 1:N) {
+        mu[i] = alpha[plant_id[i]] + theta[farm[i]] +
+                tau[year[i]] + exp(beta*fruit_diameter[i]);
+      }
+    
+      fruit_weight ~ normal(mu, sigma);
+    }
+    
+    generated quantities{
+      vector[N] log_lik;
+      vector[N] mu1;
+      array[N] real ppcheck;
+    
+      for (i in 1:N) {
+        mu1[i] = alpha[plant_id[i]] + theta[farm[i]] +
+                 tau[year[i]] + exp(beta*fruit_diameter[i]);
+      }
+    
+      for (i in 1:N) log_lik[i] = normal_lpdf(fruit_weight[i] | mu1[i], sigma);
+      
+      ppcheck = normal_rng(mu1, sigma);
+    }
+    ')
 
 ```
 
 
-# (v) Final crop yield
+### Running MCMC algorithm
+```{r, eval=TRUE}
+file <- paste(getwd(), '/diameter_weight.stan', sep = '')
+
+fit_size_weight <- cmdstan_model(file, compile = T)
+
+mod_size_weight <- 
+  fit_size_weight$sample(
+    data = dat_size_weight, 
+    iter_sampling = 3e3,
+    iter_warmup = 500,
+    chains = 3,
+    parallel_chains = 3,
+    thin = 3, 
+    refresh = 1e3,
+    seed = 123
+  )
+```
+
+
+### Model diagnostics
+
+```{r}
+
+mod_size_weight <- readRDS('mod_size_weight.rds')
+
+out_mod_size_weight <- mod_size_weight$summary(variables = 
+                                                 c('alpha', 'theta', 'tau', 'beta', 
+                                                   'sigma'))
+
+mod_diagnostics(mod_size_weight, out_mod_size_weight)
+
+ppcheck_size_weight <- mod_size_weight$draws('ppcheck', format = 'matrix')
+
+plot(density(ppcheck_size_weight[1, ]), lwd = 0.1, 
+     xlab = 'Fruit weight (g)', main = '',  ylim = c(0, 1))
+for (i in 1:500) lines(density(ppcheck_size_weight[i, ]), 
+                       lwd = 0.1)
+lines(density(dat_size_weight$fruit_weight), 
+      col = 'red', lwd = 2)
+
+post_size_weight <- mod_size_weight$draws(c('alpha', 'theta', 'tau', 'beta', 
+                                            'sigma'),
+                                          format = 'df')
+
+post_size_weight <- 
+  list(plant = post_size_weight[, grep('alpha', colnames(post_size_weight))],
+       farm = post_size_weight[, grep('theta', colnames(post_size_weight))],
+       year = post_size_weight[, grep('tau', colnames(post_size_weight))],
+       beta = post_size_weight[, grep('beta', colnames(post_size_weight))],
+       sigma = post_size_weight[, grep('sigma', colnames(post_size_weight))])
+
+```
+
+Finally, we programmed the function `predict_weight` to predict the fruit weight (g) based on its diameter (mm). This function use the above previous linear model, therefore low values of fruit diameter predict negative weights. We addressed this issue by assigning random values from a $gamma(0.03/0.01, 1/0.01)$ probability distribution.
+
+```{r}
+predict_weight <- 
+  function(x, # fruit diameter 
+           mu_est = T, # if TRUE, the function conduct 
+                       # the simulations with the average value only.
+                       # If FALSE, the simulation uses the dispersion
+                       # parameter and the likelihood to generate random values. 
+           seed = 123) {
+    
+    zeros <- which(x == 0)
+    non_zeros <- which(x > 0)
+    
+    n <- length(non_zeros)
+    
+    x_tem <- x[non_zeros]
+    
+    df <- lapply(post_size_weight[-c(4:5)], FUN = 
+                   function(i) {
+                     x <- rowMeans(i)
+                     x <- rep(x, 20)
+                   })
+    
+    df$beta <- rep(post_size_weight$beta$beta, 20)
+    df$sigma <- rep(post_size_weight$sigma$sigma, 20)
+    
+    if (mu_est) {
+      df <- lapply(df, FUN =
+                     function(vec){
+                       vec[1:n]
+                     })
+      sigma <- df[[5]]
+      
+      mu <- df[[1]] + df[[2]] + df[[3]] + exp(df[[4]]*x_tem)
+      out <- mu
+      
+      if (sum(out < 0) >= 1) {
+        n2 <- sum(out < 0)
+        set.seed(seed)
+        out[which(out < 0 )] <- rgamma(n2, 0.03/0.01, 1/0.01)
+      }
+      
+    } else {
+      
+      df <- lapply(df, FUN =
+                     function(vec){
+                       vec[1:n]
+                     })
+      sigma <- df[[5]]
+      
+      mu <- df[[1]] + df[[2]] + df[[3]] + exp(df[[4]]*x_tem)
+      
+      set.seed(seed)
+      out <- rnorm(n, mu, sigma)
+      if (sum(out < 0) >= 1) {
+        n2 <- sum(out < 0)
+        set.seed(seed)
+        out[which(out < 0 )] <- rgamma(n2, 0.03/0.01, 1/0.01)
+      }
+    }
+    
+    x[zeros] <- 0
+    x[non_zeros] <- out
+    return(x)
+  }
+predict_weight <- cmpfun(predict_weight)
+
+```
+
+Example:
+
+```{r}
+xx <- sample(0:20, 10e3, T)
+par(mfrow = c(1, 1), mar = c(4.2, 4.2, 1, 1))
+plot(xx, predict_weight(xx, mu_est = F), 
+     xlab = 'Fruit diameter (mm)', 
+     ylab = 'Predicted weight (g)', 
+     main = '', 
+     cex = 0.5)
+```
+
+# Simulation functions
+
+The above 5 steps had the purpose to parametrize the entire simulation. The following sections show the main functions conducting the actual job: honeybees visiting flowers (function `simulated_visits`), pollen deposition at the crop level (function `crop_pollination`), and crop yield (function `crop_yield`).
+
+## Floral visits
+
+The function `simulated_visits` generates the blueberry hectare and recreates the first phase of the pollination: N hives of quality k per hectare, with N foragers each. Each of the individual honeybees conduct a random number of floral visits daily, depending on the quality of its hive. That is, the function simulate the random process of honeybees visiting flowers in the crop, depending on the density and quality of the hives within the bluberry hectare.
+```{r}
+simulated_visits <- 
+  function(p_ha, # N plants per ha
+           flowers_plant, # total flowers per plant
+           beta1 = 6, #flowering percentage (par 1 beta distribution) 
+           beta2 = 4, #flowering percentage (par 2 beta distribution) 
+           visits_bee, # visits per honeybee individual
+           bees_hive, # number of hives and honeybees per hive
+           hive_aggregate = F, # if T same plants are visited by all hives 
+                               # if F each hive has its own plants
+           short = F, # if TRUE return averaged values per plant instead of total 
+                      # flowers
+           seed = 123) {
+    
+    mins <- Sys.time()
+    
+    set.seed(seed)
+    plants <- sample(flowers_plant, p_ha, replace = T) # plants per ha 
+    
+    set.seed(seed)
+    flowering_perc <- rbeta(p_ha, beta1, beta2) # flowering percentage of the plants
+    
+    plants <- round(plants * flowering_perc) # floral display of the plants
+    
+    
+    plants <- lapply(plants, FUN = 
+                       function(x) {
+                         rep(0, x)
+                       }) # number of flowers per plant 
+    
+    
+    names(plants) <- paste('plant', 1:p_ha, sep = '')
+    
+    sum_flowers <- sum(unlist(lapply(plants, length), use.names = F))
+    
+    flowers <- rep(0, sum_flowers) # total flowers in 1 ha
+    
+    foragers_bees <- bees_hive # number of bees per hive
+    
+    foragers_visits <- lapply(foragers_bees, FUN = 
+                                function(x) {
+                                  sample(visits_bee, x, replace = T)
+                                }) # trips per bee per hive
+    
+    if (hive_aggregate) {
+      
+      flowers <- 
+        # iterating over each hive j
+        lapply(foragers_visits, FUN = 
+                 function(hive) {
+                   for (day in 1:2) { # number of pollination days (blueberry days of receptivity)
+                     
+                     message(paste('Starting day', day, 'of pollination'))
+                     
+                     for (trips_bee in seq_along(hive)) { # trips of bee i in hive j
+                       # visited flowers within the crop
+                       flower_id <- sample.int(sum_flowers, hive[trips_bee]) 
+                       # recording the floral visits
+                       for (k in seq_along(flower_id)) flowers[flower_id[k]] <- flowers[flower_id[k]] + 1
+                       
+                     }
+                     
+                   }
+                   
+                   flowers
+                 })
+      
+      plants <- 
+        lapply(flowers, FUN = # iteration across flowers visited by honeybees from hive i
+                 function(visits_hive_i) {
+                   
+                   lapply(plants, FUN = 
+                            function(plant_i) {
+                              
+                              sample(visits_hive_i, length(plant_i)) # assign flower visits to each plant
+                              
+                            })
+                   
+                 })
+      
+      i <- 1
+      while (i < length(plants)) { # The visits accumulates across each flower from plant i
+        
+        for (j in 1:p_ha) plants[[i+1]][[j]] <- plants[[i]][[j]] + plants[[i+1]][[j]]
+        
+        i <- i + 1
+      }
+      
+    } else { # here the floral visits to the crop are independent
+      
+      flowers <- 
+        # iterating over each hive j
+        lapply(foragers_visits, FUN = 
+                 function(hive) {
+                   for (day in 1:2) { # number of pollination days (blueberry days of receptivity)
+                     message(paste('Starting day', day, 'of pollination'))
+                     
+                     for (trips_bee in seq_along(hive)) { # trips of bee i in hive j
+                       # visited flowers within the crop
+                       flower_id <- sample.int(sum_flowers, hive[trips_bee]) # visited flowers
+                       # recording the floral visits
+                       for (k in seq_along(flower_id)) flowers[flower_id[k]] <- flowers[flower_id[k]] + 1
+                       
+                     }
+                     
+                   }
+                   
+                   flowers
+                 })
+      
+      plants <- 
+        lapply(flowers, FUN = # iteration across flowers visited by bees from hive i
+                 function(visits_hive_i) {
+                   
+                   lapply(plants, FUN = 
+                            function(plant_i) {
+                              
+                              sample(visits_hive_i, length(plant_i)) # assign flower visits to each plant
+                              
+                            })
+                   
+                 })
+      
+    }
+    
+    names(plants) <- paste('Hive', 1:length(plants), sep = '')
+    
+    if (short) {
+      
+      message('Starting averagin visits across plants')
+      # summarizing results in a data frame
+      plants_mu <- 
+        lapply(plants, FUN = 
+                 function(x) {
+                   
+                   t <- unlist(lapply(x, mean), use.names = F)
+                   
+                   tibble(plant = paste('plant', 1:length(t), sep = ''), 
+                          visits = t)
+                   
+                 })
+      
+      for (i in seq_along(plants_mu)) {
+        plants_mu[[i]]$n_hives <- paste(i)
+      }
+      
+      plants_mu <- do.call('rbind', plants_mu)
+      
+      plants_mu <- 
+        plants_mu |> 
+        group_by(n_hives) |> 
+        transmute(mu = median(visits), 
+                  li = quantile(visits, 0.025),
+                  ls = quantile(visits, 0.975)) |> 
+        unique()
+      
+      message(paste('Toral execution time:'))
+      print(Sys.time() - mins)
+      return(plants_mu)
+      
+    } else {
+      
+      message(paste('Toral execution time:'))
+      print(Sys.time() - mins)
+      return(plants)
+      
+    }
+    
+  }
+
+simulated_visits <- cmpfun(simulated_visits)
+
+```
+
+## Pollen deposition at crop level
+
+The function `crop_pollination` simulate pollen deposition in the crop flowers from the visits generated with `simulated_visits`.
+
+```{r}
+crop_pollination <- function(p_ha, # plants per ha
+                             flowers_plant, # total flowers per plant
+                             beta1 = 6, #flowering percentage (par 1 beta distribution) 
+                             beta2 = 4, #flowering percentage (par 2 beta distribution) 
+                             visits_bee, # visits per honeybee individual
+                             bees_hive, # number of hives and honeybees per hive
+                             hive_aggregate = T, # if T same plants are visited by all hives 
+                             # if F each hive has its own plants
+                             # flowers
+                             short = F,
+                             seed = 123) {
+  
+  message('Starting floral visits')
+  t1 <- Sys.time()
+  
+  visits <- # first we simulate the floral visits to the crop
+    simulated_visits(p_ha,
+                     flowers_plant,
+                     beta1,
+                     beta2,
+                     visits_bee,
+                     bees_hive,
+                     hive_aggregate,
+                     short = F, 
+                     seed)
+  
+  message('Starting pollen deposition')
+  
+  # looping over each flower i from plant j to estimate the pollen deposition 
+  # based on the floral visits received
+  PD <- 
+    lapply(visits, FUN = 
+             function(x) {
+               lapply(x, pollen_deposition_fun, mu_est = F)
+             })
+  
+  # the following code conduct data formting tasks
+  if (short == F) {
+    
+    PD
+    
+  } else {
+    
+    PD <- 
+      lapply(PD, FUN = 
+               function(x) {
+                 
+                 t <- unlist(lapply(x, mean), use.names = F)
+                 
+                 tibble(plant = paste('plant', 1:length(t), sep = ''), 
+                        pollen = t)
+                 
+               })
+    
+    for (i in seq_along(PD)) {
+      PD[[i]]$n_hives <- paste(i)
+    }
+    
+    PD <- do.call('rbind', PD)
+    
+    PD <- 
+      PD |> 
+      group_by(n_hives) |> 
+      transmute(mu = median(pollen), 
+                li = quantile(pollen, 0.025),
+                ls = quantile(pollen, 0.975)) |> 
+      unique()
+    
+    message('Total execution time:')
+    print(Sys.time() - t1)
+    return(PD)
+    
+  }
+  
+}
+
+crop_pollination <- cmpfun(crop_pollination)
+```
+
+## Crop yield
+
+The `crop_yield` function use the simulated pollen deposition from `crop_pollination` to estimate the total fruits produced by each plant, their weight, and the yield per ha.
+
+```{r}
+crop_yield <- function(p_ha, # plants per ha
+                       flowers_plant, # total flowers per plant
+                       beta1 = 6, #flowering percentage (par 1 beta distribution) 
+                       beta2 = 4, #flowering percentage (par 2 beta distribution) 
+                       visits_bee, # visits per honeybee individual
+                       bees_hive, # number of hives and honeybees per hive
+                       hive_aggregate = T, # if T same plants are visited by all hives 
+                       # if F each hive has its own plants
+                       # flowers
+                       seed = 123, 
+                       fruit_diameter = F,
+                       average_diameter = T,
+                       average_weight = T, 
+                       cultivar = 'sch') {
+  
+  message('Starting floral visits')
+  t1 <- Sys.time()
+  
+  # first the function simulate floral visits and pollen deposition
+  pollen_deposition <- 
+    crop_pollination(p_ha,
+                     flowers_plant,
+                     beta1,
+                     beta2,
+                     visits_bee,
+                     bees_hive,
+                     hive_aggregate,
+                     short = F, 
+                     seed)
+  
+  message('Starting production simulation (t per ha)')
+  
+  # looping over each flower i from plant j to estimate the fruits
+  # produced by the plant, including their weights
+  production_plant <-
+    lapply(pollen_deposition, FUN =
+               function(colmena) {
+                 
+                 mu <- lapply(colmena, FUN =
+                                function(planta) {
+                                  # predicting berry size
+                                  t <- predict_fruit_size(planta, cultivar = cultivar,
+                                                          mean_est = average_diameter)
+                                  # predicting berry weight
+                                  t1 <- predict_weight(t, mu_est = average_weight)
+                                  
+                                  # formating data
+                                  tibble(kg_plant = sum(t1)/1e3, # kg produced per plant
+                                         mu_fruit_size = mean(t),
+                                         sd_fruit_size = sd(t),
+                                         mu_fruit_weight = mean(t1),
+                                         sd_fruit_weight = sd(t1))
+                                })
+                 
+                 mu <- do.call('rbind', mu)
+                 mu$plant <- paste('plant', 1:length(colmena))
+                 mu
+               })
+  
+  for (i in seq_along(production_plant)) production_plant[[i]]$hives <- i
+  
+  # looping over each escenario of hive density per ha to estimate the 
+  # total yield (t/ha)
+  production_ha <-
+    lapply(production_plant, FUN =
+               function(ha) {
+                 tibble(t = sum(ha$kg_plant)/1e3)
+               })
+  for (i in seq_along(production_ha)) production_ha[[i]]$hives <- i
+  
+  production_ha <- do.call('rbind', production_ha)
+  
+  output <-
+    list(production_ha = production_ha,
+         production_ha_plant = production_plant)
+  
+  return(output)
+}
+
+```
+
+# Running the simulations
+
+## Simulating floral visits and pollen deposition
+```{r, eval = FALSE}
+cluster <- makeCluster(detectCores() - 1)
+
+clusterExport(cluster, c('simulated_visits', 'total_flowers', 
+                         'visits_day', 'hives_ha', 'p_01ha', 'visits_day_HQ'))
+
+clusterEvalQ(cluster, {
+  pks <- c('tidyverse', 'magrittr', 'cmdstanr', 'parallel')
+  
+  sapply(pks, library, character.only = T)
+})
+
+t1 <- Sys.time()
+p <- parLapply(cluster, 1:1e3, fun = 
+                 function(i) {
+                   print(paste('Starting sim', i))
+                   x <- simulated_visits(p_ha = p_01ha,
+                                         flowers_plant = total_flowers, 
+                                         visits_bee = visits_day, 
+                                         bees_hive = hives_ha(20, seed = i+500), 
+                                         hive_aggregate = T, 
+                                         short = T) 
+                   x$sim <- paste('sim', i, sep = '')
+                   x
+                 })
+Sys.time() - t1
+
+p <- do.call('rbind', p) 
+
+t1 <- Sys.time()
+p_HQ <- parLapply(cluster, 1:1e3, fun = 
+                 function(i) {
+                   
+                   x <- simulated_visits(p_ha = p_01ha,
+                                         flowers_plant = total_flowers, 
+                                         visits_bee = visits_day_HQ, 
+                                         bees_hive = hives_ha(20, mu_pop = 20e3,
+                                                              seed = i+500), 
+                                         hive_aggregate = T, 
+                                         short = T) 
+                   x$sim <- paste('sim', i, sep = '')
+                   x
+                 })
+Sys.time() - t1
+
+stopCluster(cluster)
+rm(list = 'cluster')
+
+p_HQ <- do.call('rbind', p_HQ)
+
+```
+
+```{r echo=FALSE}
+p_HQ <- readRDS('p_HQ.rds')
+p <- readRDS('p_LQ.rds')
+```
+
+## Simulating pollen deposition
+
+```{r eval=FALSE}
+cluster <- makeCluster(8)
+
+clusterExport(cluster, c('simulated_visits', 'pollen_deposition_fun', 
+                         'total_flowers', 'visits_day', 'hives_ha', 
+                         'p_01ha', 'visits_day_HQ', 'crop_pollination', 
+                         'asymptote', 'slope'))
+
+clusterEvalQ(cluster, {
+  pks <- c('tidyverse', 'magrittr', 'cmdstanr',
+           'ggdag', 'dagitty', 'parallel')
+  
+  sapply(pks, library, character.only = T)
+})
+
+t <- Sys.time()
+pollen_LQ <- 
+  parLapply(cluster, 1:1e3, fun = 
+              function(i) {
+                
+                x <- crop_pollination(p_ha = p_01ha,
+                                      flowers_plant = total_flowers, 
+                                      visits_bee = visits_day, 
+                                      bees_hive = hives_ha(20, seed = i+500), 
+                                      hive_aggregate = T, 
+                                      short = T)
+                
+                x$sim <- paste('sim', i, sep = '')
+                x
+              })
+Sys.time() - t
+
+pollen_LQ <- do.call('rbind', pollen_LQ) 
+
+t <- Sys.time()
+pollen_HQ <- 
+  parLapply(cluster, 1:1e3, fun = 
+              function(i) {
+                
+                x <- crop_pollination(p_ha = p_01ha,
+                                      flowers_plant = total_flowers, 
+                                      visits_bee = visits_day_HQ, 
+                                      bees_hive = hives_ha(20, mu_pop = 20e3, 
+                                                           seed = i+500), 
+                                      hive_aggregate = T, 
+                                      short = T)
+                x$sim <- paste('sim', i, sep = '')
+                x
+              })
+Sys.time() - t
+
+stopCluster(cluster)
+rm(list = 'cluster')
+
+pollen_HQ <- do.call('rbind', pollen_HQ)
+
+```
+
+```{r echo=FALSE}
+pollen_HQ <- readRDS('pollen_HQ.rds')
+pollen_LQ <- readRDS('pollen_LQ.rds')
+```
+
+
+```{r, warning=FALSE, message=FALSE, fig.cap='ligthblue = high-quality hives; orange = low-quality hives'}
+
+p$quality <- 'low'
+p_HQ$quality <- 'hight'
+
+vis_hives <- rbind(p, p_HQ)
+
+pollen_LQ$quality <- 'low'
+pollen_HQ$quality <- 'hight'
+
+pollen_hives <- rbind(pollen_LQ, pollen_HQ)
+
+plot_vis_hive <- 
+  vis_hives |> 
+  ggplot(aes(as.numeric(n_hives), mu, shape = sim,
+             ymin = li, ymax = ls, color = quality)) +
+  geom_line(linewidth = 0.05, alpha = 0.5) + #geom_ribbon(alpha = 0.2) +
+  labs(x = expression('Hives ha'^-1), 
+       y = 'Average flower visits per flower\n at crop level') +
+  scale_shape_manual(values = rep(1, 1000)) +
+  scale_color_manual(values = c('tan1', 'lightblue3')) +
+  theme_bw() +
+  theme(legend.position = 'none', 
+        panel.grid = element_blank(), 
+        text = element_text(family = 'Times New Roman'))
+
+plot_pollen_hive <- 
+  pollen_hives |> 
+  ggplot(aes(as.numeric(n_hives), mu, shape = sim,
+             ymin = li, ymax = ls, color = quality)) +
+  geom_line(linewidth = 0.05, alpha = 0.5) + #geom_ribbon(alpha = 0.2) +
+  labs(x = expression('Hives ha'^-1), 
+       y = 'Average pollen deposition per flower\n at crop level') +
+  scale_shape_manual(values = rep(1, 1000)) +
+  scale_color_manual(values = c('tan1', 'lightblue3')) +
+  geom_hline(yintercept = c(112, 274), linetype = 2, color = 'red') +
+  theme_bw() +
+  theme(legend.position = 'none', 
+        panel.grid = element_blank(), 
+        text = element_text(family = 'Times New Roman'))
+
+plot_grid(plot_vis_hive, plot_pollen_hive, ncol = 2)
+
+```
+
+## Simulating crop yield
+
+```{r eval=FALSE}
+cluster <- makeCluster(8)
+
+clusterExport(cluster, c('simulated_visits', 'pollen_deposition_fun',
+                         'total_flowers', 'visits_day', 'hives_ha',
+                         'p_01ha', 'visits_day_HQ', 'crop_pollination',
+                         'asymptote', 'slope', 'crop_yield',
+                         'predict_fruit_size', 'predict_weight',
+                         'post_functions', 'post_size_weight'))
+
+clusterEvalQ(cluster, {
+  pks <- c('magrittr', 'parallel', "compiler", "tidyverse")
+
+  sapply(pks, library, character.only = T)
+})
+
+
+t <- Sys.time()
+t_ha_LQ <- parLapply(cluster, 1:1e3, fun = 
+                    function(i) {
+                      message(paste('simulation', i))
+                      
+                      l <- crop_yield(p_ha = p_01ha,
+                                      flowers_plant = total_flowers, 
+                                      visits_bee = visits_day, 
+                                      bees_hive = hives_ha(20, 
+                                                           mu_pop = 1e4,
+                                                           seed = 500+i), 
+                                      hive_aggregate = T,
+                                      average_diameter = F, 
+                                      average_weight = F, 
+                                      cultivar = 'eme')
+                      
+                      l$production_ha$sim <- paste('sim', i, sep = '')
+                      l$production_ha$type <- 'LQ'
+                      l$production_ha_plant <- 
+                        do.call('rbind', l$production_ha_plant)
+                      l$production_ha_plant$sim <- paste('sim', i, sep = '')
+                      l$production_ha_plant$sim <- paste('sim', i, sep = '')
+                      l$production_ha_plant$type <- 'LQ'
+                      l
+                    })
+
+Sys.time() - t
+
+names(t_ha_LQ) <- paste('sim', 1:length(t_ha_LQ), sep = '')
+
+t <- Sys.time()
+t_ha_HQ <- parLapply(cluster, 1:1e3, fun = 
+                    function(i) {
+                      message(paste('simulation', i))
+                      
+                      l <- crop_yield(p_ha = p_01ha,
+                                      flowers_plant = total_flowers, 
+                                      visits_bee = visits_day_HQ, 
+                                      bees_hive = hives_ha(20, 
+                                                           mu_pop = 2e4,
+                                                           seed = 500+i), 
+                                      hive_aggregate = T,
+                                      average_diameter = F, 
+                                      average_weight = F, 
+                                      cultivar = 'eme')
+                      
+                      l$production_ha$sim <- paste('sim', i, sep = '')
+                      l$production_ha$type <- 'HQ'
+                      l$production_ha_plant <- 
+                        do.call('rbind', l$production_ha_plant)
+                      l$production_ha_plant$sim <- paste('sim', i, sep = '')
+                      l$production_ha_plant$type <- 'HQ'
+                      l
+                    })
+
+Sys.time() - t
+
+stopCluster(cluster)
+rm(list = "cluster")
+
+names(t_ha_HQ) <- paste('sim', 1:length(t_ha_HQ), sep = '')
+```
+
+```{r echo=FALSE}
+t_ha_HQ <- readRDS('t_ha_HQ.rds')
+t_ha_LQ <- readRDS('t_ha_LQ.rds')
+```
+
+```{r}
+sims_lq <- lapply(t_ha_LQ, FUN = 
+                 function(x) {
+                   x$production_ha
+                 })
+sims_lq <- do.call('rbind', sims_lq)
+
+sims_hq <- lapply(t_ha_HQ, FUN = 
+                    function(x) {
+                      x$production_ha
+                    })
+sims_hq <- do.call('rbind', sims_hq)
+sims <- rbind(sims_lq, sims_hq)
+
+ggplot() +
+  geom_line(data = sims, aes(hives, t, linetype = sim, color = type), 
+            linewidth = 0.08, alpha = 0.5) +
+  scale_color_manual(values = c('tan1', 'lightblue')) +
+  scale_linetype_manual(values = rep(1, 500)) +
+  theme_bw() +
+  labs(y = expression('Production'~'(t ha'^-1~')'), 
+       x = expression('Hive density (ha'^-1~')')) +
+  theme(legend.position = 'none', 
+        panel.grid = element_blank(), 
+        text = element_text(family = 'Times New Roman'))
+```
+
+
+## Estimating optimal hive density per ha
+```{r eval = FALSE}
+
+cat(file = 'knee_point_sims.stan', 
+    '
+    data{
+      int N;
+      array[N] int x;
+      vector[N] y;
+    }
+    
+    parameters{
+      real alpha;
+      real phi1;
+      real phi2;
+      real<lower = 0> sigma;
+    }
+    
+    model{
+      vector[N] mu;
+      alpha ~ normal(10, 1);
+      phi1 ~ normal(0, 0.5);
+      phi2 ~ normal(0, 0.5);
+      sigma ~ exponential(1);
+      
+      for (i in 1:N) { 
+        mu[i] = alpha/(1+exp(-(phi1 + phi2 * x[i])));
+      }
+    
+      y ~ normal(mu, sigma);
+    }
+    
+    generated quantities{
+      vector[N] mu;
+      vector[N] log_lik;
+      
+      for (i in 1:N) { 
+        mu[i] = alpha/(1+exp(-(phi1 + phi2 * x[i])));
+      }
+    
+      for (i in 1:N) log_lik[i] = normal_lpdf(y[i] | mu[i], sigma);
+    }
+    ')
+
+file <- paste(getwd(), '/knee_point_sims.stan', sep = '')
+fit_knee <- cmdstan_model(file, compile = T)
+
+knee_lq <-
+  lapply(1:length(sims_lq), FUN =
+           function(i) {
+             message(paste('simulation ', i))
+             mod_knee <- 
+               fit_knee$sample(
+                 data = list(x = 1:20,
+                             y = sims_lq[[i]]$t, 
+                             N = 20),
+                 chains = 3, 
+                 parallel_chains = 3,
+                 iter_sampling = 2e3,
+                 iter_warmup = 500,
+                 thin = 3,
+                 refresh = 1e3,
+                 seed = 123
+               )
+             
+             out_knee <- mod_knee$summary()
+             
+             alpha <- out_knee$mean[2]
+             phi1 <- out_knee$mean[3]
+             phi2 <- out_knee$mean[4]
+             
+             knee <- findCutoff(1:20, alpha/(1+exp(-(phi1 + phi2 * 1:20))))
+             
+             tibble(x = knee$x, 
+                    y = knee$y)
+             
+           })
+
+knee_lq <- do.call('rbind', knee_lq)
+
+knee_hq <-
+  lapply(1:length(sims_hq), FUN =
+           function(i) {
+             
+             message(paste('simulation ', i))
+             
+             mod_knee <- 
+               fit_knee$sample(
+                 data = list(x = 1:20,
+                             y = sims_hq[[i]]$t, 
+                             N = 20),
+                 chains = 3, 
+                 parallel_chains = 3,
+                 iter_sampling = 2e3,
+                 iter_warmup = 500,
+                 thin = 3,
+                 refresh = 1e3,
+                 seed = 123
+               )
+             
+             out_knee <- mod_knee$summary()
+             
+             alpha <- out_knee$mean[2]
+             phi1 <- out_knee$mean[3]
+             phi2 <- out_knee$mean[4]
+             
+             knee <- findCutoff(1:20, alpha/(1+exp(-(phi1 + phi2 * 1:20))))
+             
+             tibble(x = knee$x, 
+                    y = knee$y)
+           })
+
+knee_hq <- do.call('rbind', knee_hq)
+
+```
+
+```{r echo=FALSE}
+knee_lq <- readRDS('knee_lq.rds')
+knee_hq <- readRDS('knee_hq.rds')
+```
+
+```{r warning=FALSE, message=FALSE, error=FALSE}
+lab <- 
+  tibble(lab = c('High-quality hives', 'Low-quality hives'), 
+         y = c(4, 4 - 1.8), 
+         x = 18)
+
+sim_t_ha <- 
+  ggplot() +
+  geom_line(data = sims, aes(hives, t, linetype = sim, color = type), 
+            linewidth = 0.08, alpha = 0.25) +
+  scale_color_manual(values = c('tan1', 'lightblue')) +
+  scale_linetype_manual(values = rep(1, 500)) +
+  geom_point(data = knee_lq, aes(x, y), color = 'lightblue', 
+             shape = 1, 
+             size = 0.2) +
+  geom_point(data = knee_hq, aes(x, y), color = 'tan1',
+             shape = 3,
+             size = 0.2) +
+  geom_label(data = lab, aes(x, y), 
+             label = lab$lab, fill = c('tan1', 'lightblue'), 
+             family = 'Times New Roman', size = 3, 
+             alpha = 0.7) +
+  scale_x_continuous(breaks = seq(1, 20, by = 2)) +
+  theme_bw() +
+  labs(y = expression('Production'~'(t ha'^-1~')'), 
+       x = expression('Hive density (ha'^-1~')')) +
+  theme(legend.position = 'non', 
+        panel.grid = element_blank(), 
+        text = element_text(family = 'Times New Roman'))
+
+knee_hq$type <- 'High quality'
+knee_lq$type <- 'Low quality'
+
+knee <- rbind(knee_hq, knee_lq)
+
+lab <- 
+  knee |> 
+  group_by(type) |> 
+  transmute(label = paste(round(mean(x), 1), 'hives per ha'), 
+            x = mean(x), 
+            y = 0.05) |> 
+  unique()
+
+knee_plot1 <- 
+  ggplot() +
+  geom_density(data = knee, 
+               aes(x, color = type, fill = type), 
+               alpha = 0.5) +
+  geom_vline(xintercept = knee %$% aggregate(x ~ type, FUN = median)$x, 
+             linetype = 3, linewidth = 0.8,
+             color = c('tan1', 'lightblue')) +
+  geom_label(data = lab, aes(x, y), label = lab$label, 
+             family = 'Times New Roman', size = 2.5, 
+             label.padding = unit(0.15, 'lines')) +
+  scale_color_manual(values = c('tan1', 'lightblue')) +
+  scale_fill_manual(values = c('tan1', 'lightblue')) +
+  scale_x_continuous(breaks = seq(0, 15, 2)) +
+  labs(x = expression('Optimal hive density (hives ha'^-1~')'), y = 'Density') +
+  theme_bw() +
+  theme(legend.position = 'none', 
+        panel.grid = element_blank(), 
+        text = element_text(family = 'Times New Roman'))
+
+lab <- 
+  knee |> 
+  group_by(type) |> 
+  transmute(label = paste(round(mean(y), 1), 't per ha'), 
+            x = mean(y)) |>
+  ungroup() |> 
+  unique() |> 
+  mutate(y = c(0.25, 0.5))
+
+knee_plot2 <- 
+  knee |> 
+  ggplot() +
+  geom_density(data = knee, 
+               aes(y, color = type, fill = type), 
+               alpha = 0.5) +
+  geom_vline(xintercept = knee %$% aggregate(y ~ type, FUN = median)$y, 
+             linetype = 3, linewidth = 0.8,
+             color = c('tan1', 'lightblue')) +
+  geom_label(data = lab, aes(x, y), label = lab$label,
+             family = 'Times New Roman', size = 2.5,
+             label.padding = unit(0.15, 'lines')) +
+  scale_color_manual(values = c('tan1', 'lightblue')) +
+  scale_fill_manual(values = c('tan1', 'lightblue')) +
+  labs(x = expression('Production (t ha'^-1~')'), y = " ") +
+  theme_bw() +
+  theme(legend.position = 'none', 
+        panel.grid = element_blank(), 
+        text = element_text(family = 'Times New Roman'))
+
+contrast <- 
+  tibble(t = knee[knee$type == 'High quality', ]$y -
+           knee[knee$type == 'Low quality', ]$y, 
+         hives = knee[knee$type == 'Low quality', ]$x - 
+           knee[knee$type == 'High quality', ]$x)
+
+lab <- 
+  tibble(lab = paste(round(median(contrast$t), 1), 't per ha'), 
+         x = median(contrast$t), 
+         y = 0.25)
+
+contrast_t <- 
+  contrast |> 
+  ggplot() +
+  geom_density(aes(t), fill = 'gray', color = 'gray', alpha = 0.5) +
+  geom_vline(xintercept = median(contrast$t), 
+             linetype = 3, linewidth = 0.8,
+             color = 'gray') +
+  labs(x = expression('Contrast of production (t ha'^-1~')'), y = " ") +
+  geom_label(data = lab, aes(x, y), label = lab$lab,
+             family = 'Times New Roman', size = 2.5,
+             label.padding = unit(0.15, 'lines')) +
+  theme_bw() +
+  theme(panel.grid = element_blank(), 
+        text = element_text(family = 'Times New Roman'))
+
+lab <- 
+  tibble(lab = paste(round(median(contrast$hives), 1), 'hives per ha'), 
+         x = median(contrast$hives), 
+         y = 0.1)
+
+contrast_h <- 
+  contrast |> 
+  ggplot() +
+  geom_density(aes(hives), fill = 'gray', color = 'gray', alpha = 0.5) +
+  geom_vline(xintercept = median(contrast$hives), 
+             linetype = 3, linewidth = 0.8,
+             color = 'gray') +
+  labs(x = expression('Contrast optimal hive density (hives ha'^-1~')'), 
+       y = "Density") +
+  geom_label(data = lab, aes(x, y), label = lab$lab,
+             family = 'Times New Roman', size = 2.5,
+             label.padding = unit(0.15, 'lines')) +
+  theme_bw() +
+  theme(panel.grid = element_blank(), 
+        text = element_text(family = 'Times New Roman'))
+
+
+plot_grid(plot_grid(NULL, sim_t_ha, NULL, 
+                    labels = c('', '(a)', ''), 
+                    label_fontfamily = 'Times New Roman', 
+                    label_size = 12, 
+                    rel_widths = c(0.15, 1, 0.15), 
+                    nrow = 1), 
+          plot_grid(knee_plot1, knee_plot2, ncol = 2, 
+                    labels = c('(b)', '(c)'), 
+                    label_fontfamily = 'Times New Roman', 
+                    label_size = 12),
+          plot_grid(contrast_h, contrast_t, ncol = 2, 
+                    labels = c('(d)', '(e)'), 
+                    label_fontfamily = 'Times New Roman', 
+                    label_size = 12),
+          ncol = 1)
+
+```
+
+## Economic costs of using one or other strategy
+
+```{r warning=FALSE, message=FALSE, error=FALSE}
+knee$geslin_price <- ifelse(knee$type == 'High quality', 
+                            20, 5)
+knee$beeflow <- ifelse(knee$type == 'High quality', 
+                       2400/10, 123.29/10)
+
+knee$cost_geslin <- knee$x * knee$geslin_price
+
+cost_poll1 <- 
+  knee |> 
+  ggplot(aes(type, cost_geslin, color = type, fill = type)) +
+  geom_boxplot(alpha = 0.5, outlier.alpha = 0, width = 0.25) +
+  geom_jitter(width = 0.05, size = 0.1, alpha = 0.3) +
+  scale_color_manual(values = c('tan1', 'lightblue')) +
+  scale_fill_manual(values = c('tan1', 'lightblue')) +
+  stat_summary(fun = 'median', geom = 'point', 
+               color = 'tomato3', size = 3) +
+  labs(y = expression('Cost of pollination service (US$ ha'^-1~')'), 
+       x = 'Honeybee hives') +
+  #facet_wrap(~ price_type) +
+  theme_bw() +
+  theme(legend.position = 'none', 
+        panel.grid = element_blank(), 
+        text = element_text(family = 'Times New Roman'))
+
+knee %$% aggregate(cost_geslin ~ type, FUN = 
+                     function(x) quantile(x, c(0, 0.5, 1)))
+
+temp <- quantile(knee[knee$type == 'High quality', ]$y, c(0.4, 0.6))
+
+plus_low_Q <- 
+  sims[sims$type == 'LQ', ] |> 
+  filter(t >= temp[1] & t <= temp[2])
+
+plus_low_Q$cost <- plus_low_Q$hives * 5
+
+boot_plus <- 
+  lapply(1:4e3, FUN = 
+           function(x) {
+             set.seed(x)
+             cost_HQ <- sample(knee[knee$type == 'High quality' &
+                                      knee$y >= temp[1] & 
+                                      knee$y <= temp[2], ]$cost_geslin, 
+                               nrow(plus_low_Q), replace = T)
+             set.seed(x)
+             hives_HQ <- sample(knee[knee$type == 'High quality' &
+                                       knee$y >= temp[1] & 
+                                       knee$y <= temp[2], ]$x, 
+                                nrow(plus_low_Q), replace = T)
+             set.seed(x)
+             t_HQ <- sample(knee[knee$type == 'High quality' &
+                                   knee$y >= temp[1] & 
+                                   knee$y <= temp[2], ]$y, 
+                            nrow(plus_low_Q), replace = T)
+             
+             tibble(cost_dif = plus_low_Q$cost - cost_HQ,
+                    hives_dif = plus_low_Q$hives/hives_HQ, 
+                    prod_diff = t_HQ - plus_low_Q$t, 
+                    hives = plus_low_Q$hives)
+           })
+
+gains_ha <- 
+  lapply(knee$y, FUN = 
+           function(x) {
+             prod <- x * 1000
+             tibble(export = (prod * 0.8) * 5.16,
+                    fresh = (prod*0.12) * 5.33, 
+                    second = (prod*0.08) * 3,
+                    costo = prod * 0.82,
+                    tot = (export + fresh + second)-costo)
+           })
+
+gains_ha <- do.call('rbind', gains_ha)
+
+economic_gains <- 
+  as_tibble(cbind(knee, gains_ha[, "tot"]))
+
+economic_gains$net_income <- 
+  economic_gains$tot - economic_gains$cost_geslin
+
+total_gains <- 
+  economic_gains |>
+  ggplot(aes(type, net_income, color = type, fill = type)) +
+  geom_boxplot(alpha = 0.5, outlier.alpha = 0, width = 0.25) +
+  geom_jitter(width = 0.05, size = 0.1, alpha = 0.3) +
+  scale_color_manual(values = c('tan1', 'lightblue')) +
+  scale_fill_manual(values = c('tan1', 'lightblue')) +
+  stat_summary(fun = 'median', geom = 'point', 
+               color = 'tomato3', size = 3) +
+  labs(y = expression('Net income (US$ ha'^-1~')'), x = 'Hives') +
+  #facet_wrap(~ price_type) +
+  theme_bw() +
+  theme(legend.position = 'none', 
+        panel.grid = element_blank(), 
+        text = element_text(family = 'Times New Roman'))
+
+lab <- 
+  tibble(lab = paste(paste(round(median(boot_plus$hives_dif), 1), 
+                           'times more'),
+                     'hives per ha',sep = '\n'), 
+         x = median(boot_plus$hives_dif), 
+         y = 0.2)
+
+contrast_hives <- 
+  boot_plus |> 
+  ggplot() +
+  geom_density(aes(hives_dif), fill = 'gray', color = 'gray', alpha = 0.5) +
+  geom_vline(xintercept = median(boot_plus$hives_dif), 
+             linetype = 3, linewidth = 0.8,
+             color = 'gray') +
+  labs(x = 'Hive density increase for equating\n low to high-quality hives', 
+       y = "Density") +
+  geom_label(data = lab, aes(x, y), label = lab$lab,
+             family = 'Times New Roman', size = 2.8,
+             label.padding = unit(0.15, 'lines')) +
+  theme_bw() +
+  theme(panel.grid = element_blank(), 
+        text = element_text(family = 'Times New Roman'))
+
+lab <- 
+  tibble(lab = paste(paste(round(median(boot_plus$cost_dif), 1), 
+                           'US$'),
+                     'less per ha',sep = '\n'), 
+         x = median(boot_plus$cost_dif), 
+         y = 0.005)
+
+contrast_cost <- 
+  boot_plus |> 
+  ggplot() +
+  geom_density(aes(cost_dif), fill = 'gray', color = 'gray', alpha = 0.5) +
+  geom_vline(xintercept = median(boot_plus$cost_dif), 
+             linetype = 3, linewidth = 0.8,
+             color = 'gray') +
+  labs(x = 'Cost difference of increasing\n low-quality hives density', 
+       y = " ") +
+  geom_label(data = lab, aes(x, y), label = lab$lab,
+             family = 'Times New Roman', size = 2.8,
+             label.padding = unit(0.15, 'lines')) +
+  theme_bw() +
+  theme(panel.grid = element_blank(), 
+        text = element_text(family = 'Times New Roman'))
+
+
+plot_grid(cost_poll1, total_gains,
+          contrast_hives, contrast_cost, nrow = 2)
+
+```
+
+
+
 

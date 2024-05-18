@@ -1111,7 +1111,7 @@ unique(vis_hives$sim)
 vis_hives |> 
   ggplot(aes(as.numeric(n_hives), mu, shape = sim,
              ymin = li, ymax = ls, color = quality)) +
-  geom_line(alpha = 0.3) + #geom_ribbon(alpha = 0.2) +
+  geom_line(alpha = 0.3, linewidth = 0.1) + #geom_ribbon(alpha = 0.2) +
   labs(x = 'Hives per blueberry ha', 
        y = 'Average flower visits per flower\n at crop level') +
   scale_shape_manual(values = rep(1, 1000)) +
@@ -1386,8 +1386,11 @@ rm(list = c('ppcheck_slope2'))
 pollen_fruit <- readRDS('datos_experimento.rds')
 pollen_fruit <- pollen_fruit[, c('planta', "tratamiento", "fruto_diam", 
                                  "carga_poli", "carga_poli2")]
-pollen_surpass <- read_xlsx('D:/github_repos/cap4_phd/all_data.xlsx', 
-                      sheet = 7, na = 'NA')[, -2]
+# pollen_surpass <- read_xlsx('D:/github_repos/cap4_phd/all_data.xlsx', 
+#                       sheet = 7, na = 'NA')[, -2]
+
+pollen_surpass <- read_xlsx('/Users/andres/Documents/github_repos/cap4_phd/all_data.xlsx', 
+                            sheet = 7, na = 'NA')[, -2]
 
 quantile(pollen_fruit[pollen_fruit$tratamiento == 'l', ]$carga_poli, 
          probs = seq(0.1, 1, by = 0.1))
@@ -1820,15 +1823,24 @@ pollen_HQ$quality <- 'hight'
 
 pollen_hives <- rbind(pollen_LQ, pollen_HQ)
 
+lab <- 
+  tibble(lab = c('High-quality hives', 'Low-quality hives'), 
+         y = c(32, 32 - 2.25), 
+         x = 5)
+
 plot_vis_hive <- 
-  vis_hives |> 
-  ggplot(aes(as.numeric(n_hives), mu, shape = sim,
-             ymin = li, ymax = ls, color = quality)) +
-  geom_line(linewidth = 0.05, alpha = 0.5) + #geom_ribbon(alpha = 0.2) +
+  ggplot() +
+  geom_line(data = vis_hives, aes(as.numeric(n_hives), mu, linetype = sim,
+                                  color = quality), 
+            linewidth = 0.1, alpha = 0.3) + 
   labs(x = expression('Hives ha'^-1), 
        y = 'Average flower visits per flower\n at crop level') +
-  scale_shape_manual(values = rep(1, 1000)) +
+  scale_linetype_manual(values = rep(1, 1000)) +
   scale_color_manual(values = c('tan1', 'lightblue3')) +
+  geom_label(data = lab, aes(x, y), 
+             label = lab$lab, fill = c('tan1', 'lightblue'), 
+             family = 'Times New Roman', size = 3, 
+             alpha = 0.7) +
   theme_bw() +
   theme(legend.position = 'none', 
         panel.grid = element_blank(), 
@@ -1838,7 +1850,7 @@ plot_pollen_hive <-
   pollen_hives |> 
   ggplot(aes(as.numeric(n_hives), mu, shape = sim,
              ymin = li, ymax = ls, color = quality)) +
-  geom_line(linewidth = 0.05, alpha = 0.5) + #geom_ribbon(alpha = 0.2) +
+  geom_line(linewidth = 0.1, alpha = 0.3) + #geom_ribbon(alpha = 0.2) +
   labs(x = expression('Hives ha'^-1), 
        y = 'Average pollen deposition per flower\n at crop level') +
   scale_shape_manual(values = rep(1, 1000)) +
@@ -1990,6 +2002,9 @@ mod_fruit_size <-
     refresh = 500,
     seed = 123
   )
+
+mod_fruit_size$save_object('mod_fruit_size.rds')
+mod_fruit_size <- readRDS('mod_fruit_size.rds')
 
 out_fruit_size <- mod_fruit_size$summary()
 
@@ -2412,8 +2427,8 @@ predict_fruit_size <- function(x,
 predict_fruit_size <- cmpfun(predict_fruit_size)
 
 
-plot(0:500, predict_fruit_size(0:500, cultivar = 'sch', mean_est = F), col = 2)
-points(0:500, predict_fruit_size(0:500, cultivar = 'sch', mean_est = T), 
+plot(0:500, predict_fruit_size(0:500, cultivar = 'eme', mean_est = F), col = 2)
+points(0:500, predict_fruit_size(0:500, cultivar = 'eme', mean_est = T), 
        pch = 16)
 
 # ======= corr size ~ weight ====
@@ -2539,6 +2554,8 @@ mod_size_weight <-
     seed = 123
   )
 
+mod_size_weight$save_object('mod_size_weight.rds')
+mod_size_weight <- readRDS('mod_size_weight.rds')
 
 out_mod_size_weight <- mod_size_weight$summary(variables = 
                                                  c('alpha', 'theta', 'tau', 'beta', 
@@ -2633,14 +2650,14 @@ t <- crop_pollination(p_ha = p_01ha,
                       bees_hive = hives_ha(10, seed = i+500), 
                       hive_aggregate = T, 
                       short = F)
-
-size <- predict_fruit_size(t$Hive10$plant1, mean_est = T) 
+t <- rpois(100, 100)
+size <- predict_fruit_size(t, mean_est = T) 
 weight <- predict_weight(size, mu_est = T)
 
 
 par(mfrow = c(1, 3), mar = c(4, 4, 1, 1))
-plot(density(t$Hive10$plant1))
-plot(density(predict_fruit_size(t$Hive10$plant1, mean_est = F)), 
+plot(density(t))
+plot(density(predict_fruit_size(t, mean_est = F)), 
      col = 'red', lwd = 2, xlab = 'Fruit diameter mm', main = '')
 lines(density(size), lwd = 2)
 plot(density(predict_weight(size, mu_est = F)), 
@@ -2666,7 +2683,7 @@ plot(xx, predict_weight(xx, mu_est = T),
 par(mfrow = c(1, 1))
 
 dat_size_weight %$% plot(fruit_diameter, fruit_weight)
-lines(0:25, predict_weight(0:25, mu_est = T), col = 'red')
+lines(0:25, predict_weight(0:25, mu_est = T), col = 'red', lwd = 3)
 
 # ====== 8. Crop production =======
 
@@ -2759,7 +2776,7 @@ clusterEvalQ(cluster, {
 
 
 t <- Sys.time()
-t_ha_LQ <- parLapply(cluster, 1:50, fun = 
+t_ha_LQ <- parLapply(cluster, 1:500, fun = 
                     function(i) {
                       message(paste('simulation', i))
                       
@@ -2772,7 +2789,7 @@ t_ha_LQ <- parLapply(cluster, 1:50, fun =
                                       hive_aggregate = T,
                                       average_diameter = F, 
                                       average_weight = F, 
-                                      cultivar = 'sch')
+                                      cultivar = 'eme')
                       
                       l$production_ha$sim <- paste('sim', i, sep = '')
                       l$production_ha$type <- 'LQ'
@@ -2791,7 +2808,7 @@ names(t_ha_LQ) <- paste('sim', 1:length(t_ha_LQ), sep = '')
 t_ha_LQ <- readRDS('t_ha_LQ.rds')
 
 t <- Sys.time()
-t_ha_HQ <- parLapply(cluster, 1:50, fun = 
+t_ha_HQ <- parLapply(cluster, 1:500, fun = 
                     function(i) {
                       message(paste('simulation', i))
                       
@@ -2804,7 +2821,7 @@ t_ha_HQ <- parLapply(cluster, 1:50, fun =
                                       hive_aggregate = T,
                                       average_diameter = F, 
                                       average_weight = F, 
-                                      cultivar = 'sch')
+                                      cultivar = 'eme')
                       
                       l$production_ha$sim <- paste('sim', i, sep = '')
                       l$production_ha$type <- 'HQ'
@@ -2905,6 +2922,7 @@ knee_lq <-
            })
 
 knee_lq <- do.call('rbind', knee_lq)
+knee_lq <- readRDS('knee_lq.rds')
 
 sims_lq <- do.call('rbind', sims_lq)
 
@@ -2946,6 +2964,7 @@ knee_hq <-
            })
 
 knee_hq <- do.call('rbind', knee_hq)
+knee_hq <- readRDS('knee_hq.rds')
 
 sims_hq <- do.call('rbind', sims_hq)
 
@@ -2991,8 +3010,13 @@ ggplot() +
 ggsave('production_ha2.jpg', width = 10, height = 8, 
        units = 'cm', dpi = 700)
 
+lab <- 
+  tibble(lab = c('High-quality hives', 'Low-quality hives'), 
+         y = c(4, 4 - 1.8), 
+         x = 18)
 
-ggplot() +
+sim_t_ha <- 
+  ggplot() +
   geom_line(data = sims, aes(hives, t, linetype = sim, color = type), 
             linewidth = 0.08, alpha = 0.25) +
   scale_color_manual(values = c('tan1', 'lightblue')) +
@@ -3000,18 +3024,18 @@ ggplot() +
   geom_point(data = knee_lq, aes(x, y), color = 'lightblue', 
              shape = 1, 
              size = 0.2) +
-  geom_point(data = knee_hq, aes(x, y), color = 'tan1', 
-             shape = 3, 
+  geom_point(data = knee_hq, aes(x, y), color = 'tan1',
+             shape = 3,
              size = 0.2) +
-  geom_vline(xintercept = c(quantile(knee_lq$x, c(0.025, 0.975))), 
-             linetype = c(2, 2), color = 'lightblue', linewidth = 0.25) +
-  geom_vline(xintercept = c(quantile(knee_hq$x, c(0.025, 0.975))), 
-             linetype = c(2, 2), color = 'tan1', linewidth = 0.25) +
+  geom_label(data = lab, aes(x, y), 
+             label = lab$lab, fill = c('tan1', 'lightblue'), 
+             family = 'Times New Roman', size = 3, 
+             alpha = 0.7) +
   scale_x_continuous(breaks = seq(1, 20, by = 2)) +
   theme_bw() +
   labs(y = expression('Production'~'(t ha'^-1~')'), 
        x = expression('Hive density (ha'^-1~')')) +
-  theme(legend.position = 'none', 
+  theme(legend.position = 'non', 
         panel.grid = element_blank(), 
         text = element_text(family = 'Times New Roman'))
 
@@ -3023,6 +3047,7 @@ knee_lq$type <- 'Low quality'
 
 knee <- rbind(knee_hq, knee_lq)
 
+
 knee |> 
   ggplot(aes(type, x, color = type, fill = type)) +
   geom_boxplot(alpha = 0.5, width = 0.4, outlier.alpha = 0) +
@@ -3030,7 +3055,35 @@ knee |>
   geom_jitter(aes(type, x), width = 0.1, alpha = 0.5, size = 0.5) +
   scale_color_manual(values = c('tan1', 'lightblue')) +
   scale_fill_manual(values = c('tan1', 'lightblue')) +
-  labs(y = expression('Hive density (ha'^-1~')'), x = NULL) +
+  labs(y = expression('Optimal hive density (ha'^-1~')'), x = NULL) +
+  theme_bw() +
+  theme(legend.position = 'none', 
+        panel.grid = element_blank(), 
+        text = element_text(family = 'Times New Roman'))
+
+lab <- 
+  knee |> 
+  group_by(type) |> 
+  transmute(label = paste(round(mean(x), 1), 'hives per ha'), 
+            x = mean(x), 
+            y = 0.05) |> 
+  unique()
+
+knee_plot1 <- 
+  ggplot() +
+  geom_density(data = knee, 
+               aes(x, color = type, fill = type), 
+               alpha = 0.5) +
+  geom_vline(xintercept = knee %$% aggregate(x ~ type, FUN = median)$x, 
+             linetype = 3, linewidth = 0.8,
+             color = c('tan1', 'lightblue')) +
+  geom_label(data = lab, aes(x, y), label = lab$label, 
+             family = 'Times New Roman', size = 2.5, 
+             label.padding = unit(0.15, 'lines')) +
+  scale_color_manual(values = c('tan1', 'lightblue')) +
+  scale_fill_manual(values = c('tan1', 'lightblue')) +
+  scale_x_continuous(breaks = seq(0, 15, 2)) +
+  labs(x = expression('Optimal hive density (hives ha'^-1~')'), y = 'Density') +
   theme_bw() +
   theme(legend.position = 'none', 
         panel.grid = element_blank(), 
@@ -3062,15 +3115,30 @@ text(round(mean(12/sample(knee[knee$type == 'High quality', ]$x, 4e3, T)), 2),
      x = 3.5, y = 0.2)
 dev.off()
 
+lab <- 
+  knee |> 
+  group_by(type) |> 
+  transmute(label = paste(round(mean(y), 1), 't per ha'), 
+            x = mean(y)) |>
+  ungroup() |> 
+  unique() |> 
+  mutate(y = c(0.25, 0.5))
 
-knee |> 
-  ggplot(aes(type, y, color = type, fill = type)) +
-  geom_boxplot(alpha = 0.5, width = 0.4, outlier.alpha = 0) +
-  scale_y_continuous(breaks = seq(1, 14, by = 1)) +
-  geom_jitter(aes(type, y), width = 0.1, alpha = 0.5, size = 0.5) +
+knee_plot2 <- 
+  knee |> 
+  ggplot() +
+  geom_density(data = knee, 
+               aes(y, color = type, fill = type), 
+               alpha = 0.5) +
+  geom_vline(xintercept = knee %$% aggregate(y ~ type, FUN = median)$y, 
+             linetype = 3, linewidth = 0.8,
+             color = c('tan1', 'lightblue')) +
+  geom_label(data = lab, aes(x, y), label = lab$label,
+             family = 'Times New Roman', size = 2.5,
+             label.padding = unit(0.15, 'lines')) +
   scale_color_manual(values = c('tan1', 'lightblue')) +
   scale_fill_manual(values = c('tan1', 'lightblue')) +
-  labs(y = expression('Production (t ha'^-1~')'), x = NULL) +
+  labs(x = expression('Production (t ha'^-1~')'), y = " ") +
   theme_bw() +
   theme(legend.position = 'none', 
         panel.grid = element_blank(), 
@@ -3078,6 +3146,72 @@ knee |>
 
 ggsave('t_ha.jpg', width = 10, height = 8, 
        units = 'cm', dpi = 700)
+
+contrast <- 
+  tibble(t = knee[knee$type == 'High quality', ]$y -
+           knee[knee$type == 'Low quality', ]$y, 
+         hives = knee[knee$type == 'Low quality', ]$x - 
+           knee[knee$type == 'High quality', ]$x)
+
+lab <- 
+  tibble(lab = paste(round(median(contrast$t), 1), 't per ha'), 
+         x = median(contrast$t), 
+         y = 0.25)
+
+contrast_t <- 
+  contrast |> 
+  ggplot() +
+  geom_density(aes(t), fill = 'gray', color = 'gray', alpha = 0.5) +
+  geom_vline(xintercept = median(contrast$t), 
+             linetype = 3, linewidth = 0.8,
+             color = 'gray') +
+  labs(x = expression('Contrast of production (t ha'^-1~')'), y = " ") +
+  geom_label(data = lab, aes(x, y), label = lab$lab,
+             family = 'Times New Roman', size = 2.5,
+             label.padding = unit(0.15, 'lines')) +
+  theme_bw() +
+  theme(panel.grid = element_blank(), 
+        text = element_text(family = 'Times New Roman'))
+
+lab <- 
+  tibble(lab = paste(round(median(contrast$hives), 1), 'hives per ha'), 
+         x = median(contrast$hives), 
+         y = 0.1)
+
+contrast_h <- 
+  contrast |> 
+  ggplot() +
+  geom_density(aes(hives), fill = 'gray', color = 'gray', alpha = 0.5) +
+  geom_vline(xintercept = median(contrast$hives), 
+             linetype = 3, linewidth = 0.8,
+             color = 'gray') +
+  labs(x = expression('Contrast optimal hive density (hives ha'^-1~')'), 
+       y = "Density") +
+  geom_label(data = lab, aes(x, y), label = lab$lab,
+             family = 'Times New Roman', size = 2.5,
+             label.padding = unit(0.15, 'lines')) +
+  theme_bw() +
+  theme(panel.grid = element_blank(), 
+        text = element_text(family = 'Times New Roman'))
+
+
+plot_grid(plot_grid(NULL, sim_t_ha, NULL, 
+                    labels = c('', '(a)', ''), 
+                    label_fontfamily = 'Times New Roman', 
+                    label_size = 12, 
+                    rel_widths = c(0.15, 1, 0.15), 
+                    nrow = 1), 
+          plot_grid(knee_plot1, knee_plot2, ncol = 2, 
+                    labels = c('(b)', '(c)'), 
+                    label_fontfamily = 'Times New Roman', 
+                    label_size = 12),
+          plot_grid(contrast_h, contrast_t, ncol = 2, 
+                    labels = c('(d)', '(e)'), 
+                    label_fontfamily = 'Times New Roman', 
+                    label_size = 12),
+          ncol = 1)
+
+ggsave('plot_production.jpg', width = 15, height = 18, units = 'cm', dpi = 700)
 
 jpeg('contrast_production.jpeg', width = 12, height = 10, 
      units = 'cm', res = 500)
@@ -3156,7 +3290,7 @@ sims_lims <-
 ggsave('fruit_sd_ha.jpg', width = 12, height = 8, 
          units = 'cm', dpi = 700)
 
-knee$x_r <- round(knee$x)
+
 
 # ================== 9. Costs ================
 
@@ -3167,8 +3301,82 @@ knee$geslin_price <- ifelse(knee$type == 'High quality',
 knee$beeflow <- ifelse(knee$type == 'High quality', 
                        2400/10, 123.29/10)
 
-knee$cost_geslin <- knee$x_r * knee$geslin_price
-knee$cost_beeflow <- knee$x_r * knee$beeflow
+knee$cost_geslin <- knee$x * knee$geslin_price
+# knee$cost_beeflow <- knee$x * knee$beeflow
+
+cost_poll1 <- 
+  knee |> 
+  ggplot(aes(type, cost_geslin, color = type, fill = type)) +
+  geom_boxplot(alpha = 0.5, outlier.alpha = 0, width = 0.25) +
+  geom_jitter(width = 0.05, size = 0.1, alpha = 0.3) +
+  scale_color_manual(values = c('tan1', 'lightblue')) +
+  scale_fill_manual(values = c('tan1', 'lightblue')) +
+  stat_summary(fun = 'median', geom = 'point', 
+               color = 'tomato3', size = 3) +
+  labs(y = expression('Cost of pollination service (US$ ha'^-1~')'), 
+       x = 'Hives') +
+  #facet_wrap(~ price_type) +
+  theme_bw() +
+  theme(legend.position = 'none', 
+        panel.grid = element_blank(), 
+        text = element_text(family = 'Times New Roman'))
+
+knee %$% aggregate(cost_geslin ~ type, FUN = 
+                     function(x) quantile(x, c(0, 0.5, 1)))
+
+
+temp <- quantile(knee[knee$type == 'High quality', ]$y, c(0.4, 0.6))
+
+plus_low_Q <- 
+  sims[sims$type == 'LQ', ] |> 
+  filter(t >= temp[1] & t <= temp[2])
+
+plus_low_Q$cost <- plus_low_Q$hives * 5
+
+boot_plus <- 
+  lapply(1:4e3, FUN = 
+           function(x) {
+             set.seed(x)
+             cost_HQ <- sample(knee[knee$type == 'High quality' &
+                                      knee$y >= temp[1] & 
+                                      knee$y <= temp[2], ]$cost_geslin, 
+                               nrow(plus_low_Q), replace = T)
+             set.seed(x)
+             hives_HQ <- sample(knee[knee$type == 'High quality' &
+                                       knee$y >= temp[1] & 
+                                       knee$y <= temp[2], ]$x, 
+                                nrow(plus_low_Q), replace = T)
+             set.seed(x)
+             t_HQ <- sample(knee[knee$type == 'High quality' &
+                                   knee$y >= temp[1] & 
+                                   knee$y <= temp[2], ]$y, 
+                            nrow(plus_low_Q), replace = T)
+             
+             tibble(cost_dif = plus_low_Q$cost - cost_HQ,
+                    hives_dif = plus_low_Q$hives/hives_HQ, 
+                    prod_diff = t_HQ - plus_low_Q$t, 
+                    hives = plus_low_Q$hives)
+           })
+
+boot_plus <- do.call('rbind', boot_plus)
+par(mfrow = c(1, 3), mar = c(4, 4, 2, 2))
+plot(density(boot_plus$cost_dif), main = '', 
+     xlab = 'Cost of increasing\n low-quality hives (US$ ha)', 
+     lwd = 3, col = 'tomato')
+text(x = median(boot_plus$cost_dif), y = 0.005, 
+     paste(round(median(boot_plus$cost_dif), 1), 'US$'))
+
+plot(density(boot_plus$hives_dif), main = '', 
+     xlab = 'Increase of hive density\n needed (hive times per ha)', 
+     ylab = '',
+     lwd = 3, col = 'tomato')
+text(x = median(boot_plus$hives_dif), y = 0.1, 
+     paste(round(median(boot_plus$hives_dif), 1), 'times more hives'))
+
+plot(density(boot_plus$prod_diff), main = '', 
+     xlab = 'Contrast of production (t)', ylab = '',
+     lwd = 3, col = 'tomato')
+dev.off()
 
 gains_ha <- 
   lapply(knee$y, FUN = 
@@ -3183,28 +3391,86 @@ gains_ha <-
 
 gains_ha <- do.call('rbind', gains_ha)
 
-new_knee <- sims[sims$type == 'LQ' &
-                   sims$hives == 13, ]
-
-gains2 <- lapply(new_knee$t, FUN = 
-                   function(x) {
-                     prod <- x * 1000
-                     tibble(export = (prod * 0.8) * 5.16,
-                            fresh = (prod*0.12) * 5.33, 
-                            second = (prod*0.08) * 3,
-                            costo = prod * 0.82,
-                            tot = (export + fresh + second)-costo)
-                   })
-
-gains2 <- do.call('rbind', gains2)
-
-economic_gains2 <- 
-  as_tibble(cbind(new_knee, gains2[, "tot"]))
-
-economic_gains2$net_gain <- economic_gains2$tot - (12*5)
-
 economic_gains <- 
   as_tibble(cbind(knee, gains_ha[, "tot"]))
+
+economic_gains$net_income <- 
+  economic_gains$tot - economic_gains$cost_geslin
+
+total_gains <- 
+  economic_gains |>
+  ggplot(aes(type, net_income, color = type, fill = type)) +
+  geom_boxplot(alpha = 0.5, outlier.alpha = 0, width = 0.25) +
+  geom_jitter(width = 0.05, size = 0.1, alpha = 0.3) +
+  scale_color_manual(values = c('tan1', 'lightblue')) +
+  scale_fill_manual(values = c('tan1', 'lightblue')) +
+  stat_summary(fun = 'median', geom = 'point', 
+               color = 'tomato3', size = 3) +
+  labs(y = expression('Net income (US$ ha'^-1~')'), x = 'Hives') +
+  #facet_wrap(~ price_type) +
+  theme_bw() +
+  theme(legend.position = 'none', 
+        panel.grid = element_blank(), 
+        text = element_text(family = 'Times New Roman'))
+
+lab <- 
+  tibble(lab = paste(paste(round(median(boot_plus$hives_dif), 1), 
+                           'times more'),
+                     'hives per ha',sep = '\n'), 
+         x = median(boot_plus$hives_dif), 
+         y = 0.2)
+
+contrast_hives <- 
+  boot_plus |> 
+  ggplot() +
+  geom_density(aes(hives_dif), fill = 'gray', color = 'gray', alpha = 0.5) +
+  geom_vline(xintercept = median(boot_plus$hives_dif), 
+             linetype = 3, linewidth = 0.8,
+             color = 'gray') +
+  labs(x = 'Hive density increase for equating\n low to high-quality hives', 
+       y = "Density") +
+  geom_label(data = lab, aes(x, y), label = lab$lab,
+             family = 'Times New Roman', size = 2.8,
+             label.padding = unit(0.15, 'lines')) +
+  theme_bw() +
+  theme(panel.grid = element_blank(), 
+        text = element_text(family = 'Times New Roman'))
+
+lab <- 
+  tibble(lab = paste(paste(round(median(boot_plus$cost_dif), 1), 
+                           'US$'),
+                     'less per ha',sep = '\n'), 
+         x = median(boot_plus$cost_dif), 
+         y = 0.005)
+
+contrast_cost <- 
+  boot_plus |> 
+  ggplot() +
+  geom_density(aes(cost_dif), fill = 'gray', color = 'gray', alpha = 0.5) +
+  geom_vline(xintercept = median(boot_plus$cost_dif), 
+             linetype = 3, linewidth = 0.8,
+             color = 'gray') +
+  labs(x = 'Cost difference of increasing\n low-quality hives density', 
+       y = " ") +
+  geom_label(data = lab, aes(x, y), label = lab$lab,
+             family = 'Times New Roman', size = 2.8,
+             label.padding = unit(0.15, 'lines')) +
+  theme_bw() +
+  theme(panel.grid = element_blank(), 
+        text = element_text(family = 'Times New Roman'))
+
+
+plot_grid(cost_poll1, total_gains,
+          contrast_hives, contrast_cost, nrow = 2)
+
+ggsave('economic_analysis.jpg', width = 15, height = 15, 
+       units = 'cm', dpi = 700)
+
+
+#============== End ==============
+
+
+
 # 
 # hq_gains <- 
 #   do.call('rbind', 
@@ -3242,9 +3508,6 @@ economic_gains <-
   gather(economic_gains, 'price_type', 'dolars', 
        -colnames(economic_gains)[c(1:6, 9)])
 
-economic_gains$net_income <- 
-  economic_gains$tot - economic_gains$dolars
-
 economic_gains$price_type <- 
   ifelse(economic_gains$price_type == 'cost_beeflow', 
          'Cavigliasso & Benito-Amaro\n   (not published)', 
@@ -3277,7 +3540,7 @@ economic_gains |>
   stat_summary(fun = 'median', geom = 'point', 
                color = 'tomato3', size = 3) +
   labs(y = expression('Net income (US$ ha'^-1~')'), x = NULL) +
-  facet_wrap(~ price_type) +
+  #facet_wrap(~ price_type) +
   theme_bw() +
   theme(legend.position = 'none', 
         panel.grid = element_blank(), 
