@@ -536,8 +536,6 @@ output_mod_tot_fru <- mod_fruit_plant$summary()
 
 mod_diagnostics(mod_fruit_plant, output_mod_tot_fru)
 
-trace_plot(mod_fruit_plant, output_mod_tot_fru$variable[1], 3)
-
 par(mfrow = c(3, 3), mar = c(4, 4, 1, 1))
 for (i in 2:10) trace_plot(mod_fruit_plant, output_mod_tot_fru$variable[i], 3)
 par(mfrow = c(1, 1))
@@ -1436,7 +1434,7 @@ mod_diagnostics(mod_asymptote_pollen, out_asymptote_pollen)
 
 ### Model's ppcheck
 
-```{r}
+```{r, warning=FALSE, message=FALSE}
 
 ppcheck_asymptote_pol <- mod_asymptote_pollen$draws(variables = 
                                                       'ppcheck', 
@@ -1991,7 +1989,7 @@ mod_fun_pollen <-
 ```{r}
 out_mod_fun <- mod_fun_pollen$summary() 
 
-par(mfrow = c(3, 3))
+par(mfrow = c(3, 3), mar = c(4, 4, 2, 2))
 for (i in 2:10) trace_plot(mod_fun_pollen, out_mod_fun$variable[i], 3)
 par(mfrow = c(1, 1))
 
@@ -2279,7 +2277,7 @@ cat(file = 'diameter_weight.stan',
 
 
 ### Running MCMC algorithm
-```{r, eval=TRUE}
+```{r, eval=TRUE, warning=FALSE, message=FALSE}
 file <- paste(getwd(), '/diameter_weight.stan', sep = '')
 
 fit_size_weight <- cmdstan_model(file, compile = T)
