@@ -1861,7 +1861,10 @@ plot_pollen_hive <-
         panel.grid = element_blank(), 
         text = element_text(family = 'Times New Roman'))
 
-plot_grid(plot_vis_hive, plot_pollen_hive, ncol = 2)
+plot_grid(plot_vis_hive, plot_pollen_hive, ncol = 2, 
+          labels = c('(a)', '(b)'), 
+          label_fontfamily = 'Times New Roman', 
+          label_size = 12)
 
 ggsave('simulation_visit_pollen.jpg', width = 16, height = 10, units = 'cm', dpi = 700)
 
@@ -3199,16 +3202,22 @@ plot_grid(plot_grid(NULL, sim_t_ha, NULL,
                     labels = c('', '(a)', ''), 
                     label_fontfamily = 'Times New Roman', 
                     label_size = 12, 
-                    rel_widths = c(0.15, 1, 0.15), 
+                    rel_widths = c(0.15, 1, 0.15),
+                    label_x = 0.1,
+                    label_y = 0.95,
                     nrow = 1), 
           plot_grid(knee_plot1, knee_plot2, ncol = 2, 
                     labels = c('(b)', '(c)'), 
                     label_fontfamily = 'Times New Roman', 
-                    label_size = 12),
+                    label_size = 12, 
+                    label_x = c(0.14, 0.13),
+                    label_y = 0.95),
           plot_grid(contrast_h, contrast_t, ncol = 2, 
                     labels = c('(d)', '(e)'), 
                     label_fontfamily = 'Times New Roman', 
-                    label_size = 12),
+                    label_size = 12, 
+                    label_x = 0.15,
+                    label_y = 0.95),
           ncol = 1)
 
 ggsave('plot_production.jpg', width = 15, height = 18, units = 'cm', dpi = 700)
@@ -3331,16 +3340,12 @@ plus_low_Q <-
   sims[sims$type == 'LQ', ] |> 
   filter(t >= temp[1] & t <= temp[2])
 
-plus_low_Q$cost <- plus_low_Q$hives * 5
+#plus_low_Q$cost <- plus_low_Q$hives * 5
 
 boot_plus <- 
   lapply(1:4e3, FUN = 
            function(x) {
-             set.seed(x)
-             cost_HQ <- sample(knee[knee$type == 'High quality' &
-                                      knee$y >= temp[1] & 
-                                      knee$y <= temp[2], ]$cost_geslin, 
-                               nrow(plus_low_Q), replace = T)
+             
              set.seed(x)
              hives_HQ <- sample(knee[knee$type == 'High quality' &
                                        knee$y >= temp[1] & 
@@ -3352,19 +3357,18 @@ boot_plus <-
                                    knee$y <= temp[2], ]$y, 
                             nrow(plus_low_Q), replace = T)
              
-             tibble(cost_dif = plus_low_Q$cost - cost_HQ,
-                    hives_dif = plus_low_Q$hives/hives_HQ, 
+             tibble(hives_dif = plus_low_Q$hives/hives_HQ, 
                     prod_diff = t_HQ - plus_low_Q$t, 
                     hives = plus_low_Q$hives)
            })
 
 boot_plus <- do.call('rbind', boot_plus)
-par(mfrow = c(1, 3), mar = c(4, 4, 2, 2))
-plot(density(boot_plus$cost_dif), main = '', 
-     xlab = 'Cost of increasing\n low-quality hives (US$ ha)', 
-     lwd = 3, col = 'tomato')
-text(x = median(boot_plus$cost_dif), y = 0.005, 
-     paste(round(median(boot_plus$cost_dif), 1), 'US$'))
+par(mfrow = c(1, 2), mar = c(4, 4, 2, 2))
+# plot(density(boot_plus$cost_dif), main = '', 
+#      xlab = 'Cost of increasing\n low-quality hives (US$ ha)', 
+#      lwd = 3, col = 'tomato')
+# text(x = median(boot_plus$cost_dif), y = 0.005, 
+#      paste(round(median(boot_plus$cost_dif), 1), 'US$'))
 
 plot(density(boot_plus$hives_dif), main = '', 
      xlab = 'Increase of hive density\n needed (hive times per ha)', 
@@ -3418,7 +3422,7 @@ lab <-
                            'times more'),
                      'hives per ha',sep = '\n'), 
          x = median(boot_plus$hives_dif), 
-         y = 0.2)
+         y = 0.1)
 
 contrast_hives <- 
   boot_plus |> 
@@ -3436,39 +3440,52 @@ contrast_hives <-
   theme(panel.grid = element_blank(), 
         text = element_text(family = 'Times New Roman'))
 
-lab <- 
-  tibble(lab = paste(paste(round(median(boot_plus$cost_dif), 1), 
-                           'US$'),
-                     'less per ha',sep = '\n'), 
-         x = median(boot_plus$cost_dif), 
-         y = 0.005)
+# lab <- 
+#   tibble(lab = paste(paste(round(median(boot_plus$cost_dif), 1), 
+#                            'US$'),
+#                      'less per ha',sep = '\n'), 
+#          x = median(boot_plus$cost_dif), 
+#          y = 0.005)
 
-contrast_cost <- 
-  boot_plus |> 
-  ggplot() +
-  geom_density(aes(cost_dif), fill = 'gray', color = 'gray', alpha = 0.5) +
-  geom_vline(xintercept = median(boot_plus$cost_dif), 
-             linetype = 3, linewidth = 0.8,
-             color = 'gray') +
-  labs(x = 'Cost difference of increasing\n low-quality hives density', 
-       y = " ") +
-  geom_label(data = lab, aes(x, y), label = lab$lab,
-             family = 'Times New Roman', size = 2.8,
-             label.padding = unit(0.15, 'lines')) +
-  theme_bw() +
-  theme(panel.grid = element_blank(), 
-        text = element_text(family = 'Times New Roman'))
+# contrast_cost <- 
+#   boot_plus |> 
+#   ggplot() +
+#   geom_density(aes(cost_dif), fill = 'gray', color = 'gray', alpha = 0.5) +
+#   geom_vline(xintercept = median(boot_plus$cost_dif), 
+#              linetype = 3, linewidth = 0.8,
+#              color = 'gray') +
+#   labs(x = 'Cost difference of increasing\n low-quality hives density', 
+#        y = " ") +
+#   geom_label(data = lab, aes(x, y), label = lab$lab,
+#              family = 'Times New Roman', size = 2.8,
+#              label.padding = unit(0.15, 'lines')) +
+#   theme_bw() +
+#   theme(panel.grid = element_blank(), 
+#         text = element_text(family = 'Times New Roman'))
 
 
-plot_grid(cost_poll1, total_gains,
-          contrast_hives, contrast_cost, nrow = 2)
+plot_grid(plot_grid(cost_poll1, total_gains, 
+                    labels = c('(a)', '(b)'),
+                    label_fontfamily = 'Times New Roman', 
+                    nrow = 1, 
+                    label_size = 12, 
+                    label_x = c(0.2, 0.24),
+                    label_y = 0.95), 
+          plot_grid(NULL, contrast_hives, NULL, 
+                    rel_widths = c(0.52, 1, 0.52), 
+                    labels = c('', '(c)', ''), 
+                    label_fontfamily = 'Times New Roman', 
+                    nrow = 1, 
+                    label_size = 12, 
+                    label_x = 0.17,
+                    label_y = 0.95), nrow = 2)
 
-ggsave('economic_analysis.jpg', width = 15, height = 15, 
+ggsave('economic_analysis.jpg', 
+       width = 15, height = 15, 
        units = 'cm', dpi = 700)
 
 
 #============== End ==============
-
 
 
 # 

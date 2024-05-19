@@ -3366,16 +3366,10 @@ plus_low_Q <-
   sims[sims$type == 'LQ', ] |> 
   filter(t >= temp[1] & t <= temp[2])
 
-plus_low_Q$cost <- plus_low_Q$hives * 5
-
 boot_plus <- 
   lapply(1:4e3, FUN = 
            function(x) {
-             set.seed(x)
-             cost_HQ <- sample(knee[knee$type == 'High quality' &
-                                      knee$y >= temp[1] & 
-                                      knee$y <= temp[2], ]$cost_geslin, 
-                               nrow(plus_low_Q), replace = T)
+             
              set.seed(x)
              hives_HQ <- sample(knee[knee$type == 'High quality' &
                                        knee$y >= temp[1] & 
@@ -3387,11 +3381,12 @@ boot_plus <-
                                    knee$y <= temp[2], ]$y, 
                             nrow(plus_low_Q), replace = T)
              
-             tibble(cost_dif = plus_low_Q$cost - cost_HQ,
-                    hives_dif = plus_low_Q$hives/hives_HQ, 
+             tibble(hives_dif = plus_low_Q$hives/hives_HQ, 
                     prod_diff = t_HQ - plus_low_Q$t, 
                     hives = plus_low_Q$hives)
            })
+
+boot_plus <- do.call('rbind', boot_plus)
 
 gains_ha <- 
   lapply(knee$y, FUN = 
@@ -3451,32 +3446,15 @@ contrast_hives <-
   theme(panel.grid = element_blank(), 
         text = element_text(family = 'Times New Roman'))
 
-lab <- 
-  tibble(lab = paste(paste(round(median(boot_plus$cost_dif), 1), 
-                           'US$'),
-                     'less per ha',sep = '\n'), 
-         x = median(boot_plus$cost_dif), 
-         y = 0.005)
-
-contrast_cost <- 
-  boot_plus |> 
-  ggplot() +
-  geom_density(aes(cost_dif), fill = 'gray', color = 'gray', alpha = 0.5) +
-  geom_vline(xintercept = median(boot_plus$cost_dif), 
-             linetype = 3, linewidth = 0.8,
-             color = 'gray') +
-  labs(x = 'Cost difference of increasing\n low-quality hives density', 
-       y = " ") +
-  geom_label(data = lab, aes(x, y), label = lab$lab,
-             family = 'Times New Roman', size = 2.8,
-             label.padding = unit(0.15, 'lines')) +
-  theme_bw() +
-  theme(panel.grid = element_blank(), 
-        text = element_text(family = 'Times New Roman'))
-
-
-plot_grid(cost_poll1, total_gains,
-          contrast_hives, contrast_cost, nrow = 2)
+plot_grid(plot_grid(cost_poll1, total_gains, 
+                    labels = c('(a)', '(b)'),
+                    label_fontfamily = 'Times New Roman', 
+                    nrow = 1), 
+          plot_grid(NULL, contrast_hives, NULL, 
+                    rel_widths = c(0.52, 1, 0.52), 
+                    labels = c('', '(c)', ''), 
+                    label_fontfamily = 'Times New Roman', 
+                    nrow = 1), nrow = 2)
 
 ```
 
