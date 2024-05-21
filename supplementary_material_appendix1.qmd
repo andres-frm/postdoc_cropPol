@@ -22,11 +22,11 @@ code-line-numbers: true
 code-copy: true
 ---
 
-This document reproduces the data wrangling, modelling and simulations from *Ramírez-Mejía et al. How much is enough? Optimizing beehive stocking densities to maximize the production of a pollinator-dependent crop*. I provided  annotations along the entire script, with emphasizing on the modelling and simulations sections. Also, in order to facilitate reading the script, I organized it in the same order of the simulation phases: **(i)** the scenario, **(ii)** hives and bees, **(iii)** foraging pattern of honeybees, **(iv)** floral visits and pollen deposition, and **(v)** final crop yield.
+This document reproduces the data wrangling, modeling, and simulations from *Ramírez-Mejía et al. How much is enough? Optimizing beehive stocking densities to maximize the production of a pollinator-dependent crop*. I provided annotations throughout the script, emphasizing the modeling and simulation sections. Also, to facilitate reading the script, I organized it in the same order as the simulation phases: **(i)** the scenario, **(ii)** hives and bees, **(iii)** foraging pattern of honeybees, **(iv)** floral visits and pollen deposition, and **(v)** final crop yield. It seems that there are some missing names for the following codes in the network dataset:
 
 # (i) The scenario
 
-## Data pollination exclusion experiments
+## Data of pollination exclusion experiments
 
 ### Northwestern Region of Argentina
 During two years, we did pollinator exclusion experiments in  nine blueberry farms with an average separation of 9.5 km between contiguous farms. Each experiment consisted of two flowering branch per plant (15 plants per farm, N = 135), where we recorded the number of flowers setting fruit. One branch was surrounded with a nylon bag to prevent pollinators visiting flowers while the other remained open to animal pollination. We used the Emerald cultivar in all experiments.
@@ -37,7 +37,7 @@ Pablo...
 
 ## Data wrangling
 
-The following code read into `R` and merge both data sets in a list object `dat_fs`. This is the data structure needed to fit the following Bayesian model.
+The following code reads into `R` and merges both data sets in a list object `dat_fs`. This data structure is needed to fit the following Bayesian model.
 
 ```{r results='hide', message=FALSE, warning=FALSE}
 pks <- c('tidyverse', 'rethinking', 'rstan', 'magrittr', 'cmdstanr',
@@ -49,7 +49,7 @@ sapply(pks, library, character.only = T)
 options(mc.core = parallel::detectCores())
 
 source('functions_mod_diagnostics.r') 
-# this is an script to load functions for bayesian model diagnostics
+# this is a script to load functions for Bayesian model diagnostics
 ```
 
 ```{r}
@@ -161,9 +161,8 @@ $$
 
 $$
 We used $\alpha_{treatment} \sim normal(0, 1)$ as intercept, with a 
-parametrization covering values from $-3.4$ to $3.4$ in the logit scales, which
-basically implies all possible values in a probability scale. $LKJCorr(2)$ set 
-values from $-1$ to $1$ for the probability distribution of correlations. $exponential(1)$ and $normal(0, 0.5)$ set standard priors for the dispersion and groupl-level effects parameters. We fitted the model using a non-centered parametrization.
+parametrization covering values from $-3.4$ to $3.4$ in the logit scales, which implies all possible values in a probability scale. $LKJCorr(2)$ set 
+values from $-1$ to $1$ for the probability distribution of correlations. $exponential(1)$ and $normal(0, 0.5)$ set standard priors for the dispersion and group-level effects parameters. We fitted the model using a non-centered parametrization.
 
 ### Model in Stan code
 
@@ -330,7 +329,7 @@ post_fruitset <- mod_fs_exp$draws(format = 'df')
 post_fruitset <- as.matrix(post_fruitset)
 
 ```
-Chain convergence ok and enough *ess* for all parameters. We had some observations with high pareto-k values, but, as you can see below, the model predicts well the observed data.
+Chain convergence is okay, and there is enough *ess* for all parameters. We had some observations with high pareto-k values, but, as you can see below, the model predicts the observed data well.
 
 #### Model's ppcheck
 
@@ -368,9 +367,9 @@ plot(density(fruit_set), main = '',
 
 ```
 
-## Data fruits production per plant
+## Data of fruits production per plant
 
-During the 2021 production season of the Northwestern Argentina, we use three farms to estimate the number of fruits produced by blueberry bushes. At each farm we chose five to six plots (Emerald cultivar, plot size $1.31~\pm~0.09~ha$ 0.09 ha) distributed from the farm border to interior to encompass potential variation in underlying pollination services, soil condition, irrigation system and plant age. The average nearest distance among plots was $384.4~\pm~197.5~m$. At each location we randomly selected five plants and counted the total number of fruits on two randomly chosen primary branches. The product of the average number of fruits per primary branch and number of primary branches was used as an estimate of total fruits produced by the plant.
+During the 2021 production season of Northwestern Argentina, we used three farms to estimate the number of fruits produced by blueberry bushes. At each farm, we chose five to six plots (Emerald cultivar, plot size $1.31~\pm~0.09~ha$ 0.09 ha) distributed from the farm border to the interior to encompass potential variation in underlying pollination services, soil condition, irrigation system, and plant age. The average nearest distance among plots was $384.4~\pm~197.5~m$. We randomly selected five plants at each location and counted the total number of fruits on two randomly chosen primary branches. The product of the average number of fruits per primary branch and the number of primary branches was used to estimate the total fruits produced by the plant.
 
 ## Data wrangling
 
@@ -417,7 +416,7 @@ $$
 
 \end{align}
 $$
-We used the $plant_i$ as the model's intercept, so the exponentiation of $normal(7, 2)$ denotes the expected average number of number of fruits per blueberry bush ($\lambda_i$ parameter). We used a non-centered parametrization to fit the model.
+We used the $plant_i$ as the model's intercept, so the exponentiation of $normal(7, 2)$ denotes the expected average number of fruits per blueberry bush ($\lambda_i$ parameter). We used a non-centered parametrization to fit the model.
 
 ### Model in Stan code
 
@@ -549,7 +548,7 @@ post_tot_fruit <-
        scale = post_tot_fruit$scale)
 
 ```
-Chain convergence ok and enough *ess* for all parameters. 
+Chain convergence ok and there is enough *ess* for all parameters. 
 
 #### Model's ppcheck
 
@@ -599,7 +598,7 @@ plot(density(rbeta(2e3, 6, 4)),
 # (ii) Hives and bees
 
 ## Quality of the hives
-`hives_ha` simulate *N* hives with an specific colony population size, and proportion of foragers. 
+`hives_ha` simulates *N* hives with a specific colony population size and proportion of foragers. 
 ```{r}
 hives_ha <- function(n_hives = 25, # n hives to be simulated
                      mu_pop = 1e4, # mu parameter NegBin distribution (i.e. N bees per hive)
@@ -640,7 +639,7 @@ lines(density(hives_ha(1e3, mu_pop = 20e3)), lwd = 2,
 
 # (iii) Foraging pattern of honeybees
 
-Assuming 8 hr of daily pollinators activity, we estimated the effective daily hours that each bee in the colony will spend for actively visiting flowers. This is based on the average and SD values reported by [Eckert et al. (1994)](https://www.jstor.org/stable/4220612) (Table 3) for nectar and pollen foragers from small and large honeybee hives. We used those values to parametrize normal distributions:
+Assuming 8 hr of daily pollinator activity, we estimated the effective daily hours each bee in the colony will spend actively visiting flowers. This is based on the average and SD values reported by [Eckert et al. (1994)](https://www.jstor.org/stable/4220612) (Table 3) for nectar and pollen foragers from small and large honeybee hives. We used those values to parametrize normal distributions:
 
 ```{r}
 ###### high quality hives 
@@ -859,7 +858,7 @@ plot(density(time_visit_honeybee), col = 'tan1', lwd = 3,
 
 ## Foraging trips per day
 
-The purpose od `N_foraging_trips` function was using the distribution of hours spend visiting flowers daily, and the time of floral visits, to estimate the number of floral visits that a single honeybee can conduct daily. To do so, the functions conduct simulations of random time of floral visits until until complete the bee hours for foraging in a single day.
+The `N_foraging_trips` function used the distribution of hours spent visiting flowers daily and the time of floral visits to estimate the number of floral visits that a single honeybee can conduct daily. To do so, the functions conduct simulations of random time of floral visits until the bee hours for foraging are completed in a single day.
 
 ```{r}
 # function to estimate the number of foraging trip per individual i in 
@@ -935,7 +934,7 @@ lines(density(visits_day_HQ), lwd = 4, col = 'tan1')
 
 ## Honeybees single-visit pollen deposition to blueberry flowers
 
-We conducted a field experiment to evaluate per-visit pollen deposition of honeybees. To do this, we placed nylon mesh bags over blueberry flowering branches with immature flowers to prevent pollen deposition by pollinators. When the flowers were fully open, we removed the bag, cut the branch and kept it fresh in water. We then walked through the crop to offer the virgin flowers to honeybees. After a single honeybee-visit, we isolated the flower, tagged it, and brought the flowering branches to the laboratory for a period of at least 12 hours to ensure that pollen grains had fully adhered to the stigma. We then collected the style and stored it in an Eppendorf tube containing 70% ethanol. In the laboratory, we did a transversal cut of the style at the stigma height and placed it on a microscope slide. We then covered the stigma with a drop of Alexander’s stain, crushed it with a coverslip and counted the pollen grains under a microscope.
+We conducted a field experiment to evaluate per-visit pollen deposition of honeybees. To do this, we placed nylon mesh bags over blueberry flowering branches with immature flowers to prevent pollen deposition by pollinators. When the flowers were fully open, we removed the bag, cut the branch and kept it fresh in water. We then walked through the crop to offer the virgin flowers to honeybees. After a single honeybee-visit, we isolated the flower, tagged it, and brought the flowering branches to the laboratory for at least 12 hours to ensure that pollen grains had fully adhered to the stigma. We then collected the style and stored it in an Eppendorf tube containing 70% ethanol. In the laboratory, we did a transversal cut of the style at the stigma height and placed it on a microscope slide. We then covered the stigma with a drop of Alexander’s stain, crushed it with a coverslip and counted the pollen grains under a microscope.
 
 ## Data wrangling
 
@@ -973,7 +972,7 @@ $$
 
 \end{align}
 $$
-We used $\mu_\alpha \sim normal(3, 0.5)$ since it encompass the expected average pollen deposition during a single honeybee visit to blueberry flowers. We used a non-centered parametrization and partial pooling across individuals to estimate the parameters.
+We used $\mu_\alpha \sim normal(3, 0.5)$ since it encompasses the expected average pollen deposition during a single honeybee visit to blueberry flowers. We used a non-centered parametrization and partial pooling across individuals to estimate the parameters.
 
 ### Model in Stan code
 
@@ -1144,7 +1143,7 @@ text(x = 2, y = 300, 'Optimal pollination')
 
 We use this simulate data to estimate the rate of increase (i.e. slope in a linear model). It will be used to parametrize an asymptotic exponential function to predict pollen deposition in blueberry flowers after *N* honeybee visits.
 
-Lest estimate the slope using a model
+Let estimate the slope using a model.
 
 ```{r, eval =FALSE}
 
@@ -1246,7 +1245,7 @@ ppcheck ok!
 
 During the 2021 bloom season (July – August) of Northwestern Argentina, we selected three farms to evaluate blueberry pollen deposition. In these farms growers manage pollination service by deploying honeybee hives during bloom season. At each farm we chose five to six plots (Emerald cultivar, plot size 1.31 $\pm$ 0.09 ha) distributed along different spatial contexts within the farm (i.e. from farm border to interior) to encompass the breadth of underlying variation in potential pollination services, as well as soil condition, irrigation system and plant age (Appendix 1 Figure S1b). The average nearest distance among plots within the same farms was 384.4 $\pm$ 197.5 m. Then, we randomly selected five plants within each plot. After flower anthesis, we collected three styles per sampled plant ($N_{total} = 240$), and stored them in an Eppendorf tube with 70% ethanol. In the laboratory, we did a transversal cut of the style at the stigma height and placed it on a microscope slide, from which we covered the stigma with a drop of Alexander’s staining. This was then pressed over with a coverslip, and we counted the number of pollen grains using a microscope as a measure of stigmatic pollen load.
 
-We also use data from pollen deposition experiments in Snowchaser cultivar in one of the sampled farm (see section 5.1 below), and included stigmas from free pollination treatment for the analysis.
+We also used data from pollen deposition experiments in the Snowchaser cultivar in one of the sampled farms (see section 5.1 below) and included stigmas from free pollination treatment for the analysis.
 
 We merged both data sets and fitted a model to estimate overall pollen deposition in blueberry flowers and the expected saturation level of the stigma.
 
@@ -1318,7 +1317,7 @@ $$
 
 \end{align}
 $$
-We used $\tau$ as the intercept, and $\mu_\tau \sim normal(5, 0.5)$ distribution since encompass the expected average value of pollen deposition. The $normal(0, 1)$ and $exponential(1)$ are standard priors for group level effects and disperssion parameters. We ffited the model using a non-centered parametrization and partial pooling among clusters (i.e. plants, farms and cultivars). 
+We used $\tau$ as the intercept, and $\mu_\tau \sim normal(5, 0.5)$ distribution since encompasses the expected average value of pollen deposition. The $normal(0, 1)$ and $exponential(1)$ are standard priors for group-level effects and dispersion parameters. We fitted the model using a non-centered parametrization and partial pooling among clusters (i.e., plants, farms, and cultivars). 
 
 ### Model in Stan code
 ```{r}
@@ -1448,7 +1447,7 @@ lines(density(dat_asymptote_pollen$no_polen), col = 'red', lwd = 2)
 
 ### Saturation level of the stigma
 
-We used posterior predictive distributions of stigmatic pollen deposition for each cultivar, to estimate cumulative distribution functions and approximate the saturation point.
+We used each cultivar's posterior predictive distributions of stigmatic pollen deposition to estimate cumulative distribution functions and approximate the saturation point.
 
 ```{r}
 post_asymptote <- 
@@ -1511,7 +1510,7 @@ curve(mean(asymptote)*(1-exp(-mean(slope)*x)),
 
 ```
 
-Finally, the function `pollen_deposition_fun` simulate pollen deposition in blueberry flowers after N honeybee visits
+Finally, the `pollen_deposition_fun` function simulates pollen deposition in blueberry flowers after N honeybee visits
 
 ```{r}
 pollen_deposition_fun <- function(x, # number of flower visits to the flower
@@ -1547,7 +1546,7 @@ We conducted a field experiment to maximize variation in stigmatic pollen load a
 
 ## Data wrangling 
 
-The first part involves a model of fruit diameter of three cultivars to estimate the contrast among them (i.e. size differences). It was necessary since the the following fruit weight estimation from fruit diameter (see section ... ) was conducted using Emerald's data.
+The first part involves a model of the fruit diameter of three cultivars to estimate the contrast among them (i.e., size differences).
 ```{r}
 
 snow <- as_tibble(readRDS('datos_experimento.rds'))
@@ -1593,7 +1592,7 @@ dat_fru_size$N_farms <- max(dat_fru_size$farm)
 ```
 
 ## Model fruit size differences among cultivars
-mu[i] = alpha[cultivar[i]] + theta[plant_id[i]] + tau[farm[i]];
+
 ### Matematical version 
 
 $$
@@ -1616,7 +1615,7 @@ $$
 & \sigma \sim exponential(1) \\
 \end{align}
 $$
-We use $\alpha$ as the model's intercept and $\mu_\alpha \sim normal(15, 2.5)$ prior since encompass the expected diameter of a blueberry fruit. We used a non-centered parametrization and partial pooling to estimate the parameters.
+We use $\alpha$ as the model's intercept and $\mu_\alpha \sim normal(15, 2.5)$ prior since it encompasses the expected diameter of a blueberry fruit. We used a non-centered parametrization and partial pooling to estimate the parameters.
 
 ### Model in Stan code
 
@@ -1734,7 +1733,7 @@ lines(density(dat_fru_size$fruit_diam), col = 'red', lwd = 1.5)
 
 ### Contrast of ruit size
 
-We used posterior predictive distributions of fruit size for all cultivars to estimate the contrast (here we included other cultivars, but only emerald and snowchaser are used in the following analyses).
+We used posterior predictive distributions of fruit size for all cultivars to estimate the contrast (here we included other cultivars, but only snowchaser is used in the following analyses).
 ```{r, fig.cap= 'sch = snowchaser; eme = emerald; pri = primadona; sj = san joaquin'}
 post_fruit_size <- mod_fruit_size$draws(c('alpha', 'theta', 'tau', 'sigma'), 
                                         format = 'df')
@@ -2056,10 +2055,10 @@ points(dat_pollen_fun$carga_poli, dat_pollen_fun$fruit_sch, lwd = 2,
        cex = 0.3)
 ```
 
-Finally, the function `predict_fruit_size` use the posterior distribution of the previous model to simulate expected fruit size given stigmatic pollen deposition.
+Finally, the function `predict_fruit_size` uses the previous model's posterior distribution to simulate the expected fruit size given stigmatic pollen deposition.
 ```{r}
 predict_fruit_size <- function(x, # stigmatic pollen load
-                               cultivar = 'sch', # abreviation of the cultivar.
+                               cultivar = 'sch', # abbreviation of the cultivar.
                                # sch = snowchaser, eme = emerald, sj = san joaquin,
                                # pri = primadona
                                mean_est = TRUE, # if TRUE, the function conduct 
@@ -2130,7 +2129,7 @@ points(0:500, predict_fruit_size(0:500, cultivar = 'eme', mean_est = T),
 
 ### Data collection
 
-During the production seasons of 2020 and 2021, we sampled the size of fruits produced nine blueberry farms of the Northwestern Argentina. To do so, we selected one plot per farm twelve plants/plot. We randomly selected ten mature fruits per sampled plant to measure their equatorial diameter with a 0.05 mm accuracy caliper, and fruit weight with a digital balance of 0.01 g resolution. Using this data we fitted a model to estimate fruit weight as function of the diameter.
+During the production seasons of 2020 and 2021, we sampled the size of fruits produced in nine blueberry farms in Northwestern Argentina. We selected one plot per farm and twelve plants/plot to do so. We randomly selected ten mature fruits per sampled plant to measure their equatorial diameter with a 0.05 mm accuracy caliper and fruit weight with a digital balance of 0.01 g resolution. Using this data, we fitted a model to estimate fruit weight as a function of the diameter.
 
 
 ### Data wrangling
@@ -2186,7 +2185,7 @@ $$
 
 \end{align}
 $$
-We defined the $\alpha$ parameter as the model's intercept and $normal(1.5, 0.5)$ as prior since encompass the typical weight of of a blueberry fruit. We used using a non-centered parametrization and partial pooling to estimate the parameters.
+We defined the $\alpha$ parameter as the model's intercept and $normal(1.5, 0.5)$ as prior since it encompasses the typical weight of a blueberry fruit. We used using non-centered parametrization and partial pooling to estimate the parameters.
 
 ### Model in Stan code
 
@@ -2330,7 +2329,7 @@ post_size_weight <-
 
 ```
 
-Finally, we programmed the function `predict_weight` to predict the fruit weight (g) based on its diameter (mm). This function use the above previous linear model, therefore low values of fruit diameter predict negative weights. We addressed this issue by assigning random values from a $gamma(0.03/0.01, 1/0.01)$ probability distribution.
+Finally, we programmed the function `predict_weight` to predict the fruit weight (g) based on its diameter (mm). This function uses the previous linear model above. Therefore, low values of fruit diameter predict negative weights. We addressed this issue by assigning random values from a $gamma(0.03/0.01, 1/0.01)$ probability distribution.
 
 ```{r}
 predict_weight <- 
@@ -2414,11 +2413,11 @@ plot(xx, predict_weight(xx, mu_est = F),
 
 # Simulation functions
 
-The above 5 steps had the purpose to parametrize the entire simulation. The following sections show the main functions conducting the actual job: honeybees visiting flowers (function `simulated_visits`), pollen deposition at the crop level (function `crop_pollination`), and crop yield (function `crop_yield`).
+The above five steps were used to parametrize the entire simulation. The following sections show the main functions conducting the actual job: honeybees visiting flowers (function `simulated_visits`), pollen deposition at the crop level (function `crop_pollination`), and crop yield (function `crop_yield`).
 
 ## Floral visits
 
-The function `simulated_visits` generates the blueberry hectare and recreates the first phase of the pollination: N hives of quality k per hectare, with N foragers each. Each of the individual honeybees conduct a random number of floral visits daily, depending on the quality of its hive. That is, the function simulate the random process of honeybees visiting flowers in the crop, depending on the density and quality of the hives within the bluberry hectare.
+The function `simulated_visits` generates the blueberry hectare and recreates the first pollination phase: N hives of quality k per hectare, with N foragers each. Each of the individual honeybees conducts a random number of floral visits daily, depending on the quality of its hive. That is, the function simulates the random process of honeybees visiting flowers in the crop, depending on the density and quality of the hives within the blueberry hectare.
 ```{r}
 simulated_visits <- 
   function(p_ha, # N plants per ha
@@ -2428,7 +2427,7 @@ simulated_visits <-
            visits_bee, # visits per honeybee individual
            bees_hive, # number of hives and honeybees per hive
            hive_aggregate = F, # if T same plants are visited by all hives 
-                               # if F each hive has its own plants
+                               # if F each hive has its own simulated plants
            short = F, # if TRUE return averaged values per plant instead of total 
                       # flowers
            seed = 123) {
@@ -2454,7 +2453,7 @@ simulated_visits <-
     
     sum_flowers <- sum(unlist(lapply(plants, length), use.names = F))
     
-    flowers <- rep(0, sum_flowers) # total flowers in 1 ha
+    flowers <- rep(0, sum_flowers) # total flowers in one ha
     
     foragers_bees <- bees_hive # number of bees per hive
     
@@ -2473,7 +2472,7 @@ simulated_visits <-
                      
                      message(paste('Starting day', day, 'of pollination'))
                      
-                     for (trips_bee in seq_along(hive)) { # trips of bee i in hive j
+                     for (trips_bee in seq_along(hive)) { # trips of bee i from hive j
                        # visited flowers within the crop
                        flower_id <- sample.int(sum_flowers, hive[trips_bee]) 
                        # recording the floral visits
@@ -2595,7 +2594,7 @@ simulated_visits <- cmpfun(simulated_visits)
 
 ## Pollen deposition at crop level
 
-The function `crop_pollination` simulate pollen deposition in the crop flowers from the visits generated with `simulated_visits`.
+The function `crop_pollination` simulates pollen deposition in the crop flowers from the visits generated with `simulated_visits`.
 
 ```{r}
 crop_pollination <- function(p_ha, # plants per ha
@@ -2634,7 +2633,7 @@ crop_pollination <- function(p_ha, # plants per ha
                lapply(x, pollen_deposition_fun, mu_est = F)
              })
   
-  # the following code conduct data formting tasks
+  # the following code conduct data formatting tasks
   if (short == F) {
     
     PD
@@ -2679,7 +2678,7 @@ crop_pollination <- cmpfun(crop_pollination)
 
 ## Crop yield
 
-The `crop_yield` function use the simulated pollen deposition from `crop_pollination` to estimate the total fruits produced by each plant, their weight, and the yield per ha.
+The `crop_yield` function uses the simulated pollen deposition from `crop_pollination` to estimate each plant's total fruit production, weight, and yield per ha.
 
 ```{r}
 crop_yield <- function(p_ha, # plants per ha
@@ -2967,7 +2966,7 @@ t_ha_LQ <- parLapply(cluster, 1:1e3, fun =
                                       hive_aggregate = T,
                                       average_diameter = F, 
                                       average_weight = F, 
-                                      cultivar = 'eme')
+                                      cultivar = 'sch')
                       
                       l$production_ha$sim <- paste('sim', i, sep = '')
                       l$production_ha$type <- 'LQ'
@@ -2997,7 +2996,7 @@ t_ha_HQ <- parLapply(cluster, 1:1e3, fun =
                                       hive_aggregate = T,
                                       average_diameter = F, 
                                       average_weight = F, 
-                                      cultivar = 'eme')
+                                      cultivar = 'sch')
                       
                       l$production_ha$sim <- paste('sim', i, sep = '')
                       l$production_ha$type <- 'HQ'
@@ -3050,6 +3049,7 @@ ggplot() +
 
 
 ## Estimating optimal hive density per ha
+
 ```{r eval = FALSE}
 
 cat(file = 'knee_point_sims.stan', 
