@@ -22,7 +22,7 @@ code-line-numbers: true
 code-copy: true
 ---
 
-This document reproduces the data wrangling, modeling, and simulations from *Ramírez-Mejía et al. How much is enough? Optimizing beehive stocking densities to maximize the production of a pollinator-dependent crop*. I provided annotations throughout the script, emphasizing the modeling and simulation sections. Also, to facilitate reading the script, I organized it in the same order as the simulation phases: **(i)** the scenario, **(ii)** hives and bees, **(iii)** foraging pattern of honeybees, **(iv)** floral visits and pollen deposition, and **(v)** final crop yield. It seems that there are some missing names for the following codes in the network dataset:
+This document reproduces the data wrangling, modeling, and simulations from *Ramírez-Mejía et al. How much is enough? Optimizing beehive stocking densities to maximize the production of a pollinator-dependent crop*. I provided annotations throughout the script, emphasizing the modeling and simulation sections. Also, to facilitate reading the script, I organized it in the same order as the simulation phases: **(i)** the scenario, **(ii)** hives and bees, **(iii)** foraging pattern of honeybees, **(iv)** floral visits and pollen deposition, and **(v)** final crop yield.
 
 # (i) The scenario
 
