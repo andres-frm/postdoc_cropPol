@@ -3501,13 +3501,17 @@ total_gains <-
         text = element_text(family = 'Times New Roman'))
 
 lab <- 
-  tibble(lab = paste(paste(round(median(boot_plus$hives_dif), 1), 
+  tibble(lab = paste(paste(round(mean(boot_plus$hives_dif), 1), 
                            'fold increase of'),
                      'low quality hives per ha',sep = '\n'), 
          x = median(boot_plus$hives_dif), 
          y = 0.1)
 
-boot_plus
+boot_plus |> 
+  transmute(mu = mean(hives_dif), 
+            li = quantile(hives_dif, 0.05),
+            ls = quantile(hives_dif, 0.95)) |> 
+  unique()
 
 contrast_hives <- 
   boot_plus |> 
