@@ -1828,6 +1828,14 @@ lab <-
          y = c(32, 32 - 2.25), 
          x = 5)
 
+vis_hives |> 
+  group_by(n_hives, quality) |> 
+  transmute(mu1 = mean(mu), 
+            li = quantile(mu, 0.05),
+            ls = quantile(mu, 0.95)) |> 
+  unique() |> 
+  print(n = 40)
+
 plot_vis_hive <- 
   ggplot() +
   geom_line(data = vis_hives, aes(as.numeric(n_hives), mu, linetype = sim,
@@ -1845,6 +1853,24 @@ plot_vis_hive <-
   theme(legend.position = 'none', 
         panel.grid = element_blank(), 
         text = element_text(family = 'Times New Roman'))
+
+pollen_hives |> 
+  group_by(n_hives, quality) |> 
+  transmute(mu1 = mean(mu), 
+            li = quantile(mu, 0.05),
+            ls = quantile(mu, 0.95)) |> 
+  unique() |> 
+  print(n = 40)
+
+diff_hives <- 
+  (pollen_hives[pollen_hives$n_hives == '7' &
+                 pollen_hives$quality == 'low', ]$mu * 100)/
+  pollen_hives[pollen_hives$n_hives == '7' &
+               pollen_hives$quality != 'low', ]$mu
+
+
+mean(diff_hives)
+quantile(diff_hives, c(0.025, 0.975))
 
 plot_pollen_hive <- 
   pollen_hives |> 
@@ -3017,6 +3043,23 @@ lab <-
   tibble(lab = c('High-quality hives', 'Low-quality hives'), 
          y = c(4, 4 - 1.8), 
          x = 18)
+knee_hq |> 
+  transmute(mu_x = mean(x), 
+            li_x = quantile(x, 0.05),
+            ls_x = quantile(x, 0.95),
+            mu_y = mean(y), 
+            li_y = quantile(y, 0.05),
+            ls_y = quantile(y, 0.95)) |> 
+  unique()
+
+knee_lq |> 
+  transmute(mu_x = mean(x), 
+            li_x = quantile(x, 0.05),
+            ls_x = quantile(x, 0.95),
+            mu_y = mean(y), 
+            li_y = quantile(y, 0.05),
+            ls_y = quantile(y, 0.95)) |> 
+  unique()
 
 sim_t_ha <- 
   ggplot() +
@@ -3153,6 +3196,8 @@ ggsave('t_ha.jpg', width = 10, height = 8,
 contrast <- 
   tibble(t = knee[knee$type == 'High quality', ]$y -
            knee[knee$type == 'Low quality', ]$y, 
+         hives2 = (knee[knee$type == 'High quality', ]$x * 100)/
+           knee[knee$type == 'Low quality', ]$x,
          hives = knee[knee$type == 'Low quality', ]$x - 
            knee[knee$type == 'High quality', ]$x)
 
@@ -3160,6 +3205,18 @@ lab <-
   tibble(lab = paste(round(median(contrast$t), 1), 't per ha'), 
          x = median(contrast$t), 
          y = 0.25)
+
+contrast |> 
+  transmute(mu = mean(t), 
+            li = quantile(t, 0.05), 
+            ls = quantile(t, 0.95), 
+            mu2 = mean(hives), 
+            li2 = quantile(hives, 0.05), 
+            ls2 = quantile(hives, 0.95), 
+            mu3 = mean(hives2), 
+            li3 = quantile(hives2, 0.05), 
+            ls3 = quantile(hives2, 0.95)) |> 
+  unique()
 
 contrast_t <- 
   contrast |> 
@@ -3269,7 +3326,7 @@ sims_hq2 <- do.call('rbind', sims_hq2)
 
 sims2 <- rbind(sims_lq2, sims_hq2)
 
-sims_lims <- 
+#sims_lims <- 
   sims2 |> 
   group_by(hives, type) |> 
   transmute(li = quantile(sd_fruit_size, 0.025),
@@ -3312,6 +3369,20 @@ knee$beeflow <- ifelse(knee$type == 'High quality',
 
 knee$cost_geslin <- knee$x * knee$geslin_price
 # knee$cost_beeflow <- knee$x * knee$beeflow
+
+knee |> 
+  filter(type == 'High quality') |> 
+  transmute(mu = mean(cost_geslin), 
+            li = quantile(cost_geslin, 0.05), 
+            ls = quantile(cost_geslin, 0.975)) |> 
+  unique()
+
+knee |> 
+  filter(type != 'High quality') |> 
+  transmute(mu = mean(cost_geslin), 
+            li = quantile(cost_geslin, 0.05), 
+            ls = quantile(cost_geslin, 0.975)) |> 
+  unique()
 
 cost_poll1 <- 
   knee |> 
@@ -3401,6 +3472,18 @@ economic_gains <-
 economic_gains$net_income <- 
   economic_gains$tot - economic_gains$cost_geslin
 
+economic_gains |> 
+  group_by(type) |> 
+  transmute(mu = mean(net_income), 
+            li = quantile(net_income, 0.05), 
+            ls = quantile(net_income, 0.975)) |> 
+  unique() |> 
+  as.data.frame()
+
+cont_net <- 
+  economic_gains[economic_gains$type == 'High quality', ]$net_income /
+  economic_gains[economic_gains$type != 'High quality', ]$net_income
+
 total_gains <- 
   economic_gains |>
   ggplot(aes(type, net_income, color = type, fill = type)) +
@@ -3419,10 +3502,12 @@ total_gains <-
 
 lab <- 
   tibble(lab = paste(paste(round(median(boot_plus$hives_dif), 1), 
-                           'times more'),
-                     'hives per ha',sep = '\n'), 
+                           'fold increase of'),
+                     'low quality hives per ha',sep = '\n'), 
          x = median(boot_plus$hives_dif), 
          y = 0.1)
+
+boot_plus
 
 contrast_hives <- 
   boot_plus |> 
