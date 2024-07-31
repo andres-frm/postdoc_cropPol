@@ -29,11 +29,18 @@ This document reproduces the data wrangling, modeling, and simulations from *Ram
 ## Data of pollination exclusion experiments
 
 ### Northwestern Region of Argentina
+We conducted this study in the Yungas ecoregion, a subtropical Andean forest that, in northwestern Argentina, ranges from 22° to 29° S. This region has a marked seasonality with low rainfall between June and October and high rainfall between November and March. The study sites were located roughly at 400 m a.s.l. at the Yungas piedmont in Tucumán province, whose original wooded vegetation was almost completely replaced by agricultural expansion. Currently, the agricultural landscape of Yungas piedmont is a mosaic of scattered patches of natural cover and pollination-dependent crops, such as blueberry and strawberry, embedded in a large-scale matrix of monoculture systems of sugar cane, citrus, and soybean.
+
 During two years, we did pollinator exclusion experiments in  nine blueberry farms with an average separation of 9.5 km between contiguous farms. Each experiment consisted of two flowering branch per plant (15 plants per farm, N = 135), where we recorded the number of flowers setting fruit. One branch was surrounded with a nylon bag to prevent pollinators visiting flowers while the other remained open to animal pollination. We used the Emerald cultivar in all experiments.
 
 ### Central Region of Argentina
 
-Pablo...
+We collected the data in the province of Entre Ríos, Argentina. Climatic characteristics of the region include hot and humid summers, mild winters, rainfall distributed throughout the year, high relative humidity, prevailing winds from the north and northeast, and the presence of fog during the colder months.
+
+Along two seasons (2016 and 2021), we did pollinator exclusion experiments to quantify the effect of animal pollination in blueberry fruit set. To do so, we sampled nine farms (~1 ha) of the Emerald cultivar with an average distance of ~5 km between contiguous farms. The pollination treatments consisted on 5-6 randomly chosen plants per farm: 3 branches were used as open treatments to assess the effect of  pollinators on fruit set, whereas the rest were excluded using white Voile fabric bags to isolate the flowers from floral visitors. Regardless of the treatment, the number of floral buds was counted at the beginning of each branch, removing those in doubt of viability. Then during the harvesting season,the number of developed fruits was counted to estimate the proportion of flowers setting fruit. 
+
+
+
 
 ## Data wrangling
 
