@@ -1849,6 +1849,7 @@ plot_vis_hive <-
              label = lab$lab, fill = c('tan1', 'lightblue'), 
              family = 'Times New Roman', size = 3, 
              alpha = 0.7) +
+  geom_hline(yintercept = 6:7, linetype = 2, col = 'red') +
   theme_bw() +
   theme(legend.position = 'none', 
         panel.grid = element_blank(), 
@@ -1871,6 +1872,25 @@ diff_hives <-
 
 mean(diff_hives)
 quantile(diff_hives, c(0.025, 0.975))
+
+
+
+full_join(full_join(pollen_hives %$% 
+                      aggregate(mu ~ as.numeric(n_hives) + quality, FUN = quantile, probs = 0.05), 
+                    pollen_hives %$% 
+                      aggregate(mu ~ as.numeric(n_hives) + quality, FUN = quantile, probs = 0.95), 
+                    by = c('as.numeric(n_hives)', 'quality')), 
+          pollen_hives %$% 
+            aggregate(mu ~ as.numeric(n_hives) + quality, FUN = mean),
+          by = c('as.numeric(n_hives)', 'quality'))
+
+pollen_hives |> 
+  group_by(n_hives, quality) |> 
+  transmute(nu = mean(mu), 
+            li = quantile(mu, c(0.05, 0.95)), 
+            ls = quantile(mu, c(0.05, 0.95))) |> 
+  unique()
+  
 
 plot_pollen_hive <- 
   pollen_hives |> 
@@ -3269,7 +3289,7 @@ plot_grid(plot_grid(NULL, sim_t_ha, NULL,
                     label_size = 12, 
                     label_x = c(0.14, 0.13),
                     label_y = 0.95),
-          plot_grid(contrast_h, contrast_t, ncol = 2, 
+          plot_grid(contrast_t, contrast_h, ncol = 2, 
                     labels = c('(d)', '(e)'), 
                     label_fontfamily = 'Times New Roman', 
                     label_size = 12, 

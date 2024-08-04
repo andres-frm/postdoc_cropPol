@@ -2,19 +2,15 @@
 title: "How much is enough? Optimizing beehive stocking densities to maximize the production of a pollinator-dependent crop"
 subtitle: 'Appendix S1. Journal: Ecological Applications'
 author: "Andrés F. Ramírez-Mejía"
-format: 
-  html:
-    theme: 
-      light: journal
-      dark: [journal, theme-dark.scss]
+format:
+  pdf: 
     toc: true
-    toc-depth: 10
-    toc-expand: 10
-    toc-title: "Content"
-    toc-location: left
-    embed-resources: true
-number-sections: true
+    number-sections: true
+    colorlinks: true
+number-sections: false
 number-depth: 10
+date-format: full 
+date-modified: now
 mainfont: Times New Roman
 code-fold: false
 code-overflow: scroll
@@ -140,9 +136,7 @@ dat_fs$N_year <- length(unique(dat_fs$year_id))
 ### Matematical version
 
 $$
-
-\begin{align}
-
+\begin{aligned}
 & fruits~produced_i \sim binomial(n~sampled~flowers_i, ~p_i)\\
 & logit(p_i) = \alpha_{treatment_i} + \theta_{[plant_i, treatmen_i]} + \\ 
 & \delta_{[farm_i, treatment_i]} + \lambda_{[region_i, treatment_i]} + \gamma_{[year_i, treatment_i]} \\
@@ -163,9 +157,7 @@ $$
 & Z_\delta \sim normal(0, 0.5) \\
 & Z_\lambda \sim normal(0, 0.5) \\
 & Z_\gamma \sim normal(0, 0.5) \\
-
-\end{align}
-
+\end{aligned}
 $$
 We used $\alpha_{treatment} \sim normal(0, 1)$ as intercept, with a 
 parametrization covering values from $-3.4$ to $3.4$ in the logit scales, which implies all possible values in a probability scale. $LKJCorr(2)$ set 
@@ -370,7 +362,8 @@ fruit_set <-
   )
 
 plot(density(fruit_set), main = '', 
-     xlab = 'Probability of blueberry\n flowers setting fruit', col = 'lightblue', lwd = 4)
+     xlab = 'Probability of blueberry\n flowers setting fruit', 
+     col = 'lightblue', lwd = 4)
 
 ```
 
@@ -383,13 +376,16 @@ During the 2021 production season of Northwestern Argentina, we used three farms
 ```{r}
 fruit_plant <- readRDS('fruit_plant.rds')
 
-fruit_plant$plant_id <- as.factor(paste(fruit_plant$farm, fruit_plant$plant, sep = '_'))
+fruit_plant$plant_id <- as.factor(paste(fruit_plant$farm, 
+                                        fruit_plant$plant, sep = '_'))
 
-fruit_plant$plot <- as.factor(paste(fruit_plant$farm, fruit_plant$plot, sep = '_'))
+fruit_plant$plot <- as.factor(paste(fruit_plant$farm, 
+                                    fruit_plant$plot, sep = '_'))
 
 fruit_plant <- fruit_plant[, c("farm", "plot", 'plant_id', "total_fruts")]
 
-fruit_plant <- lapply(fruit_plant, function(x) if(is.factor(x)) as.numeric(x) else(x))
+fruit_plant <- lapply(fruit_plant, 
+                      function(x) if(is.factor(x)) as.numeric(x) else(x))
 
 fruit_plant$N <- length(fruit_plant$farm)
 fruit_plant$N_farm <- length(unique(fruit_plant$farm))
@@ -403,8 +399,7 @@ fruit_plant$total_fruts <- round(fruit_plant$total_fruts)
 ### Matematical version
 
 $$
-\begin{align}
-
+\begin{aligned}
 & Total~fruit~bush_i \sim negative~binomial(\lambda_i, \sigma) \\
 & log(\lambda_i) = \alpha_{plant~i} + \theta_{plot~i} + \delta_{farm~i} \\
 & \alpha_{plant~i} = \mu_\alpha + Z_\alpha \times \sigma_\alpha \\
@@ -420,8 +415,7 @@ $$
 & \sigma_\theta \sim exponential(1) \\
 & \sigma_\delta \sim exponential(1) \\
 & \sigma \sim exponential(1) \\
-
-\end{align}
+\end{aligned}
 $$
 We used the $plant_i$ as the model's intercept, so the exponentiation of $normal(7, 2)$ denotes the expected average number of fruits per blueberry bush ($\lambda_i$ parameter). We used a non-centered parametrization to fit the model.
 
@@ -504,7 +498,9 @@ cat(file = 'fruits_plant.stan',
         mu_1[i] = exp(mu_1[i]);
       }
     
-      for (i in 1:N) log_lik[i] = neg_binomial_2_lpmf(total_fruts[i] | mu_1[i], scale);
+      for (i in 1:N) {
+        log_lik[i] = neg_binomial_2_lpmf(total_fruts[i] | mu_1[i], scale);
+      }
     
       ppcheck = neg_binomial_2_rng(mu_1, scale);
       
@@ -560,7 +556,8 @@ Chain convergence ok and there is enough *ess* for all parameters.
 #### Model's ppcheck
 
 ```{r}
-ppcheck_tot_fru <- mod_fruit_plant$draws(variables = 'ppcheck', format = 'matrix')
+ppcheck_tot_fru <- mod_fruit_plant$draws(variables = 'ppcheck', 
+                                         format = 'matrix')
 
 plot(density(ppcheck_tot_fru[1, ]), ylim = c(0, 0.00025), main = '', 
      xlab = 'Fruit produced per plant', lwd = 0.1)
@@ -607,17 +604,19 @@ plot(density(rbeta(2e3, 6, 4)),
 ## Quality of the hives
 `hives_ha` simulates *N* hives with a specific colony population size and proportion of foragers. 
 ```{r}
-hives_ha <- function(n_hives = 25, # n hives to be simulated
-                     mu_pop = 1e4, # mu parameter NegBin distribution (i.e. N bees per hive)
-                     sigma_pop = 10, # dispersion parameter NegBin distribution. N Bees per hive
-                     beta_1 = 2.5, # parameter 1 beta distribution. Proportion of foragers
-                     beta_2 = 8, # parameter 1 beta distribution. Proportion of foragers
-                     seed = 1){ # set seed to reproduce the analysis
+hives_ha <- 
+  function(n_hives = 25, # n hives to be simulated
+           mu_pop = 1e4, # mu parameter NegBin distribution (i.e. Bees hive-1)
+           sigma_pop = 10, # dispersion parameter NegBin distribution. Bees hive-1
+           beta_1 = 2.5, # parameter 1 beta distribution. Proportion of foragers
+           beta_2 = 8, # parameter 1 beta distribution. Proportion of foragers
+           seed = 1){ # set seed to reproduce the analysis
   
   hive_ha <- n_hives # hives per ha
   
   set.seed(seed) 
-  # Simulating the number of bees per hive j from the negative binomial distribution
+  # Simulating the number of bees per hive j 
+  # from the negative binomial distribution
   beehive_strength <- rnbinom(hive_ha, size = sigma_pop, mu = mu_pop)
   
   set.seed(seed)
@@ -711,7 +710,8 @@ plot(density(trips_bee_HQ), main = '', col = 'tan1',
 lines(density(trips_bee_LQ), main = '', col = 'lightblue',
       xlab = 'Daily trip per bee (min)', lwd = 2)
 
-plot(density((foraging_time_HQ/60)/60), col = 'tan1', main = '', ylim = c(0, 1.1),
+plot(density((foraging_time_HQ/60)/60), col = 'tan1', main = '',
+     ylim = c(0, 1.1),
      xlab = 'Daily foraging time per bee (h)', lwd = 2, xlim = c(1, 6.5))
 lines(density((foraging_time_LQ/60)/60), main = '', col = 'lightblue',
       xlab = 'Daily foraging time per bee (h)', lwd = 2)
@@ -738,8 +738,7 @@ length(visit_span) # sampling size (N independent records)
 ### Matematical version
 
 $$
-\begin{align}
-
+\begin{aligned}
 & time~of~floral~visit_i \sim gamma(\frac{\mu_i}{\sigma}, \frac{1}{\sigma}) \\
 & log(\mu_i) = \alpha_{individual~ i} \\
 & \alpha_{individual~ i} = \mu_\alpha + Z_\alpha \times \sigma_\alpha \\
@@ -747,7 +746,7 @@ $$
 & Z_\alpha \sim normal(0, 1) \\
 & \sigma_\alpha \sim exponential(1) \\
 & \sigma \sim exponential(3) \\
-\end{align}
+\end{aligned}
 $$
 
 ### Model in Stan code
@@ -834,7 +833,8 @@ mod_visit_honeybee <-
 mod_diagnostics(mod_visit_honeybee, output_mod_visit_honeybee)
 
 par(mfrow = c(3, 3), mar = c(4, 4, 1, 1))
-for (i in 1:9) trace_plot(mod_visit_honeybee, output_mod_visit_honeybee$variable[i], 3)
+for (i in 1:9) trace_plot(mod_visit_honeybee, 
+                          output_mod_visit_honeybee$variable[i], 3)
 par(mfrow = c(1, 1))
 ```
 Chain convergenceits ok 
@@ -931,7 +931,8 @@ visits_day <- readRDS('visits_day_LQ.rds')
 
 visits_day_HQ <- readRDS('visits_day_HQ.rds')
 
-plot(density(visits_day), main = '', xlab = 'Number of floral visits of\n a single forager honeybee bee per day',
+plot(density(visits_day), main = '', 
+     xlab = 'Number of floral visits of\n a single forager honeybee bee per day',
      lwd = 4, col = 'lightblue', xlim = c(395, 2000))
 lines(density(visits_day_HQ), lwd = 4, col = 'tan1')
 
@@ -967,8 +968,7 @@ dat_apis <- list(pollen = apisSVP,
 ### Matematical version
 
 $$
-\begin{align}
-
+\begin{aligned}
 & Pollen~deposition_i \sim negative~binomial(\lambda_i, \sigma) \\
 & log(\lambda_i) = \alpha_{individual~i} \\
 & \alpha_{individual~i} = \mu_\alpha + Z_\alpha \times \sigma_\alpha \\
@@ -976,8 +976,7 @@ $$
 & Z_\alpha \sim normal(0, 1) \\
 & \sigma_\alpha \sim exponential(1) \\
 & \sigma \sim exponential(1) \\
-
-\end{align}
+\end{aligned}
 $$
 We used $\mu_\alpha \sim normal(3, 0.5)$ since it encompasses the expected average pollen deposition during a single honeybee visit to blueberry flowers. We used a non-centered parametrization and partial pooling across individuals to estimate the parameters.
 
@@ -1030,7 +1029,9 @@ cat(file = 'model_apis_SVP.stan',
         lambda1[i] = exp(lambda1[i]);
       }
     
-      for (i in 1:N) log_lik[i] = neg_binomial_2_lpmf(pollen[i] | lambda1[i], phi);
+      for (i in 1:N) {
+        log_lik[i] = neg_binomial_2_lpmf(pollen[i] | lambda1[i], phi);
+      }
     
       ppcheck = neg_binomial_2_rng(lambda1, phi);
       
@@ -1099,7 +1100,8 @@ This simulation assume that pollen grains are added up at each sequential visit 
 ```{r}
 set.seed(1234)
 sim_visits <- 
-  apply(pp_check_svp[c(sample(1:nrow(pp_check_svp), size = 100, replace = F)),], 1, 
+  apply(pp_check_svp[c(sample(1:nrow(pp_check_svp), 
+                              size = 100, replace = F)),], 1, 
         simplify = 'list', FUN = 
           # looping over posterior predictive distributions of single-visit
           # pollen deposition
@@ -1192,7 +1194,9 @@ cat(file = 'slope_svp_apis.stan',
         lambda1[i] = exp(lambda1[i]);
       }
     
-      for (i in 1:N) log_lik[i] = neg_binomial_2_lpmf(poll_ac[i] | lambda1[i], sigma);
+      for (i in 1:N) {
+        log_lik[i] = neg_binomial_2_lpmf(poll_ac[i] | lambda1[i], sigma);
+      }
     
       ppcheck = neg_binomial_2_rng(lambda1, sigma);
     }
@@ -1221,7 +1225,8 @@ mod_svp_slope <-
 
 mod_svp_slope <- readRDS('mod_svp_slope.rds')
 
-post_svp_slope <- mod_svp_slope$draws(variables = c('alpha', 'beta'), format = 'df')
+post_svp_slope <- 
+  mod_svp_slope$draws(variables = c('alpha', 'beta'), format = 'df')
 
 ppcheck_slope <- 
   sapply(1:length(sim_visits$vis), FUN = 
@@ -1266,13 +1271,16 @@ pollen_fruit <- pollen_fruit[, c('planta', "tratamiento", "fruto_diam",
 # pollen_surpass <- read_xlsx('D:/github_repos/cap4_phd/all_data.xlsx', 
 #                       sheet = 7, na = 'NA')[, -2]
 
-pollen_surpass <- read_xlsx('/Users/andres/Documents/github_repos/cap4_phd/all_data.xlsx', 
-                            sheet = 7, na = 'NA')[, -2]
+pollen_surpass <- 
+  read_xlsx('/Users/andres/Documents/github_repos/cap4_phd/all_data.xlsx', 
+            sheet = 7, na = 'NA')[, -2]
 
-dat_asymptote_pollen <- as_tibble(pollen_fruit[pollen_fruit$tratamiento == 'l', ])
+dat_asymptote_pollen <- 
+  as_tibble(pollen_fruit[pollen_fruit$tratamiento == 'l', ])
 
 dat_asymptote_pollen$farm <- 'sta_lu'
-dat_asymptote_pollen$plant_id <- dat_asymptote_pollen %$% paste(farm, planta, sep = '')
+dat_asymptote_pollen$plant_id <- 
+  dat_asymptote_pollen %$% paste(farm, planta, sep = '')
 
 pollen_surpass$plant <- pollen_surpass %$% paste(farm, plant, sep = '')
 pollen_surpass$cultivar <- 'eme'
@@ -1304,8 +1312,7 @@ dat_asymptote_pollen$N_farm <- max(dat_asymptote_pollen$farm)
 ### Matematical version
 
 $$
-\begin{align}
-
+\begin{aligned}
 & stigmatic~pollen~load_i \sim negative~binomial(\lambda_i, \sigma) \\
 & log(\lambda_i) = \tau_{cultivar~i} + \theta_{farm~i} + \alpha_{plant~i} \\
 & \tau_{cultivar~i} = \mu_\tau + Z_\tau \times \sigma_\tau\\ 
@@ -1321,8 +1328,7 @@ $$
 & \sigma_\theta \sim exponential(1) \\
 & \sigma_\alpha \sim exponential(1) \\
 & \sigma \sim exponential(1) \\
-
-\end{align}
+\end{aligned}
 $$
 We used $\tau$ as the intercept, and $\mu_\tau \sim normal(5, 0.5)$ distribution since encompasses the expected average value of pollen deposition. The $normal(0, 1)$ and $exponential(1)$ are standard priors for group-level effects and dispersion parameters. We fitted the model using a non-centered parametrization and partial pooling among clusters (i.e., plants, farms, and cultivars). 
 
@@ -1401,7 +1407,9 @@ cat(file = 'asymptote_pollen1.stan',
         mu1[i] = exp(mu1[i]);
       }
     
-      for (i in 1:N) log_lik[i] = neg_binomial_2_lpmf(no_polen[i] | mu1[i], scale);
+      for (i in 1:N) {
+        log_lik[i] = neg_binomial_2_lpmf(no_polen[i] | mu1[i], scale);
+      }
       
       ppcheck = neg_binomial_2_rng(mu1, scale);
     }
@@ -1494,7 +1502,8 @@ plot(NULL, xlim = c(0, 450), ylim = c(0, 1),
      xlab = 'Pollen load', ylab = 'eCDF')
 for (i in 1:100) lines(ecdf(sch[, i]), col = 'lightblue')
 for (i in 1:100) lines(ecdf(eme[, i]), col = 'tan')
-abline(v = c(225, 250, 275), lty = c(2, 3, 2), col = 'red') # Aproximate level of saturation
+abline(v = c(225, 250, 275), 
+       lty = c(2, 3, 2), col = 'red') # Aproximate level of saturation
 
 ```
 
@@ -1520,13 +1529,14 @@ curve(mean(asymptote)*(1-exp(-mean(slope)*x)),
 Finally, the `pollen_deposition_fun` function simulates pollen deposition in blueberry flowers after N honeybee visits
 
 ```{r}
-pollen_deposition_fun <- function(x, # number of flower visits to the flower
-                                  mu_est = T, # if TRUE, the function uses
-                                              # average value of parameters. if
-                                              # FALSE, it uses random values from
-                                              # the distributions 
-                                  beta = slope, # slope parameter
-                                  theta = asymptote) { # asymptotic parameter
+pollen_deposition_fun <- 
+  function(x, # number of flower visits to the flower
+           mu_est = T, # if TRUE, the function uses
+                       # average value of parameters. if
+                       # FALSE, it uses random values from
+                       # the distributions 
+           beta = slope, # slope parameter
+           theta = asymptote) { # asymptotic parameter
   if (mu_est) {
     # setting average values of the parameters
     a <- mean(theta) 
@@ -1582,7 +1592,8 @@ colnames(pri_sj1) <- colnames(snow1)
 fruit_size_cultivars <- rbind(snow1, emerald1, pri_sj1)
 
 fruit_size_cultivars[] <- 
-  lapply(fruit_size_cultivars, function(x) if(!is.numeric(x)) as.factor(x) else(x))
+  lapply(fruit_size_cultivars, 
+         function(x) if(!is.numeric(x)) as.factor(x) else(x))
 
 fruit_size_cultivars <- 
   fruit_size_cultivars[fruit_size_cultivars$fruit_diam > 2, ]
@@ -1603,8 +1614,7 @@ dat_fru_size$N_farms <- max(dat_fru_size$farm)
 ### Matematical version 
 
 $$
-\begin{align}
-
+\begin{aligned}
 & berry~diameter_i \sim normal(\mu_i, \sigma) \\
 & \mu_i = \alpha_{cultivar~i} + \theta_{plant~i} + \tau_{farm~i} \\
 & \alpha_{cultivar~i} = \mu_\alpha + Z_\alpha \times \sigma_\alpha \\
@@ -1620,7 +1630,7 @@ $$
 & \sigma_\theta \sim exponential(1) \\
 & \sigma_\tau \sim exponential(1) \\
 & \sigma \sim exponential(1) \\
-\end{align}
+\end{aligned}
 $$
 We use $\alpha$ as the model's intercept and $\mu_\alpha \sim normal(15, 2.5)$ prior since it encompasses the expected diameter of a blueberry fruit. We used a non-centered parametrization and partial pooling to estimate the parameters.
 
@@ -1829,16 +1839,14 @@ dat_pollen_fun$N <- nrow(snow)
 ### Matematical version
 
 $$
-\begin{align}
-
+\begin{aligned}
 & diameter~of~fruit_i \sim normal(\mu_i, \sigma) \\
 & \mu_i = \frac{\theta}{1+e^{-(\phi + \tau \times pollen~deposition_i)}} \\
 & \theta \sim normal(17, 2) \\
 & \phi \sim normal(0, 1) \\
 & \tau \sim normal(0, 1) \\
 & \sigma \sim exponential(1) \\
-
-\end{align}
+\end{aligned}
 $$
 
 ### Model in Stan code
@@ -2064,15 +2072,16 @@ points(dat_pollen_fun$carga_poli, dat_pollen_fun$fruit_sch, lwd = 2,
 
 Finally, the function `predict_fruit_size` uses the previous model's posterior distribution to simulate the expected fruit size given stigmatic pollen deposition.
 ```{r}
-predict_fruit_size <- function(x, # stigmatic pollen load
-                               cultivar = 'sch', # abbreviation of the cultivar.
-                               # sch = snowchaser, eme = emerald, sj = san joaquin,
-                               # pri = primadona
-                               mean_est = TRUE, # if TRUE, the function conduct 
-                               # the simulations with the average value only.
-                               # If FALSE, the simulation uses the dispersion
-                               # parameter and the likelihood to generate random values.
-                               seed = 123) {
+predict_fruit_size <- 
+  function(x, # stigmatic pollen load
+           cultivar = 'sch', # abbreviation of the cultivar.
+                             # sch = snowchaser, eme = emerald, sj = san joaquin,
+                             # pri = primadona
+           mean_est = TRUE, # if TRUE, the function conduct 
+                            # the simulations with the average value only.
+                            # If FALSE, the simulation uses the dispersion
+                            # parameter and the likelihood to generate random values.
+           seed = 123) {
   if (length(x) <= 1) {
     stop(message('x length must be greater than 1'))
   }
@@ -2172,8 +2181,7 @@ dat_size_weight$N_plant <- max(dat_size_weight$plant_id)
 ### Matematical version
 
 $$
-\begin{align}
-
+\begin{aligned}
 & fruit~weight_i \sim normal(\mu_i, \sigma) \\
 & \mu_i = \alpha_{plant~i} + \theta_{farm~i} + \tau_{year~i} + e^{\beta\times fruit~diameter_i} \\
 & \alpha_{plant~i} = \mu_\alpha + Z_\alpha \times \sigma_\alpha \\
@@ -2189,8 +2197,7 @@ $$
 & \sigma_\theta \sim exponential(1) \\
 & \sigma_\tau \sim exponential(1) \\
 & \sigma \sim exponential(1) \\
-
-\end{align}
+\end{aligned}
 $$
 We defined the $\alpha$ parameter as the model's intercept and $normal(1.5, 0.5)$ as prior since it encompasses the typical weight of a blueberry fruit. We used using non-centered parametrization and partial pooling to estimate the parameters.
 
@@ -2309,7 +2316,8 @@ mod_size_weight <-
 mod_size_weight <- readRDS('mod_size_weight.rds')
 
 out_mod_size_weight <- mod_size_weight$summary(variables = 
-                                                 c('alpha', 'theta', 'tau', 'beta', 
+                                                 c('alpha', 'theta', 
+                                                   'tau', 'beta', 
                                                    'sigma'))
 
 mod_diagnostics(mod_size_weight, out_mod_size_weight)
@@ -2445,7 +2453,8 @@ simulated_visits <-
     plants <- sample(flowers_plant, p_ha, replace = T) # plants per ha 
     
     set.seed(seed)
-    flowering_perc <- rbeta(p_ha, beta1, beta2) # flowering percentage of the plants
+    flowering_perc <- 
+      rbeta(p_ha, beta1, beta2) # flowering percentage of the plants
     
     plants <- round(plants * flowering_perc) # floral display of the plants
     
@@ -2475,11 +2484,13 @@ simulated_visits <-
         # iterating over each hive j
         lapply(foragers_visits, FUN = 
                  function(hive) {
-                   for (day in 1:2) { # number of pollination days (blueberry days of receptivity)
+                   for (day in 1:2) { 
+                     # number of pollination days (blueberry days of receptivity)
                      
                      message(paste('Starting day', day, 'of pollination'))
                      
-                     for (trips_bee in seq_along(hive)) { # trips of bee i from hive j
+                     for (trips_bee in seq_along(hive)) { 
+                       # trips of bee i from hive j
                        # visited flowers within the crop
                        flower_id <- sample.int(sum_flowers, hive[trips_bee]) 
                        # recording the floral visits
@@ -2493,20 +2504,23 @@ simulated_visits <-
                  })
       
       plants <- 
-        lapply(flowers, FUN = # iteration across flowers visited by honeybees from hive i
+        lapply(flowers, FUN = 
+                 # iteration across flowers visited by honeybees from hive i
                  function(visits_hive_i) {
                    
                    lapply(plants, FUN = 
                             function(plant_i) {
                               
-                              sample(visits_hive_i, length(plant_i)) # assign flower visits to each plant
+                              sample(visits_hive_i, length(plant_i)) 
+                              # assign flower visits to each plant
                               
                             })
                    
                  })
       
       i <- 1
-      while (i < length(plants)) { # The visits accumulates across each flower from plant i
+      while (i < length(plants)) { 
+        # The visits accumulates across each flower from plant i
         
         for (j in 1:p_ha) plants[[i+1]][[j]] <- plants[[i]][[j]] + plants[[i+1]][[j]]
         
@@ -2519,14 +2533,18 @@ simulated_visits <-
         # iterating over each hive j
         lapply(foragers_visits, FUN = 
                  function(hive) {
-                   for (day in 1:2) { # number of pollination days (blueberry days of receptivity)
+                   for (day in 1:2) { 
+                     # number of pollination days (blueberry days of receptivity)
                      message(paste('Starting day', day, 'of pollination'))
                      
-                     for (trips_bee in seq_along(hive)) { # trips of bee i in hive j
+                     for (trips_bee in seq_along(hive)) { 
+                       # trips of bee i in hive j
                        # visited flowers within the crop
-                       flower_id <- sample.int(sum_flowers, hive[trips_bee]) # visited flowers
+                       flower_id <- sample.int(sum_flowers, hive[trips_bee]) 
+                       # visited flowers
                        # recording the floral visits
-                       for (k in seq_along(flower_id)) flowers[flower_id[k]] <- flowers[flower_id[k]] + 1
+                       for (k in seq_along(flower_id)) 
+                         flowers[flower_id[k]] <- flowers[flower_id[k]] + 1
                        
                      }
                      
@@ -2536,13 +2554,15 @@ simulated_visits <-
                  })
       
       plants <- 
-        lapply(flowers, FUN = # iteration across flowers visited by bees from hive i
+        lapply(flowers, FUN = 
+                 # iteration across flowers visited by bees from hive i
                  function(visits_hive_i) {
                    
                    lapply(plants, FUN = 
                             function(plant_i) {
                               
-                              sample(visits_hive_i, length(plant_i)) # assign flower visits to each plant
+                              sample(visits_hive_i, length(plant_i)) 
+                              # assign flower visits to each plant
                               
                             })
                    
@@ -2604,17 +2624,18 @@ simulated_visits <- cmpfun(simulated_visits)
 The function `crop_pollination` simulates pollen deposition in the crop flowers from the visits generated with `simulated_visits`.
 
 ```{r}
-crop_pollination <- function(p_ha, # plants per ha
-                             flowers_plant, # total flowers per plant
-                             beta1 = 6, #flowering percentage (par 1 beta distribution) 
-                             beta2 = 4, #flowering percentage (par 2 beta distribution) 
-                             visits_bee, # visits per honeybee individual
-                             bees_hive, # number of hives and honeybees per hive
-                             hive_aggregate = T, # if T same plants are visited by all hives 
+crop_pollination <- 
+  function(p_ha, # plants per ha
+           flowers_plant, # total flowers per plant
+           beta1 = 6, #flowering percentage (par 1 beta distribution) 
+           beta2 = 4, #flowering percentage (par 2 beta distribution) 
+           visits_bee, # visits per honeybee individual
+           bees_hive, # number of hives and honeybees per hive
+           hive_aggregate = T, # if T same plants are visited by all hives 
                              # if F each hive has its own plants
                              # flowers
-                             short = F,
-                             seed = 123) {
+           short = F,
+           seed = 123) {
   
   message('Starting floral visits')
   t1 <- Sys.time()
@@ -2688,20 +2709,21 @@ crop_pollination <- cmpfun(crop_pollination)
 The `crop_yield` function uses the simulated pollen deposition from `crop_pollination` to estimate each plant's total fruit production, weight, and yield per ha.
 
 ```{r}
-crop_yield <- function(p_ha, # plants per ha
-                       flowers_plant, # total flowers per plant
-                       beta1 = 6, #flowering percentage (par 1 beta distribution) 
-                       beta2 = 4, #flowering percentage (par 2 beta distribution) 
-                       visits_bee, # visits per honeybee individual
-                       bees_hive, # number of hives and honeybees per hive
-                       hive_aggregate = T, # if T same plants are visited by all hives 
+crop_yield <- 
+  function(p_ha, # plants per ha
+           flowers_plant, # total flowers per plant
+           beta1 = 6, #flowering percentage (par 1 beta distribution) 
+           beta2 = 4, #flowering percentage (par 2 beta distribution) 
+           visits_bee, # visits per honeybee individual
+           bees_hive, # number of hives and honeybees per hive
+           hive_aggregate = T, # if T same plants are visited by all hives 
                        # if F each hive has its own plants
                        # flowers
-                       seed = 123, 
-                       fruit_diameter = F,
-                       average_diameter = T,
-                       average_weight = T, 
-                       cultivar = 'sch') {
+           seed = 123, 
+           fruit_diameter = F,
+           average_diameter = T,
+           average_weight = T, 
+           cultivar = 'sch') {
   
   message('Starting floral visits')
   t1 <- Sys.time()
@@ -2729,13 +2751,17 @@ crop_yield <- function(p_ha, # plants per ha
                  mu <- lapply(colmena, FUN =
                                 function(planta) {
                                   # predicting berry size
-                                  t <- predict_fruit_size(planta, cultivar = cultivar,
-                                                          mean_est = average_diameter)
+                                  t <- 
+                                    predict_fruit_size(planta, 
+                                                       cultivar = cultivar,
+                                                       mean_est = average_diameter)
                                   # predicting berry weight
-                                  t1 <- predict_weight(t, mu_est = average_weight)
+                                  t1 <- predict_weight(t, 
+                                                       mu_est = average_weight)
                                   
                                   # formating data
-                                  tibble(kg_plant = sum(t1)/1e3, # kg produced per plant
+                                  tibble(kg_plant = sum(t1)/1e3, 
+                                         # kg produced per plant
                                          mu_fruit_size = mean(t),
                                          sd_fruit_size = sd(t),
                                          mu_fruit_weight = mean(t1),
@@ -2918,8 +2944,7 @@ plot_vis_hive <-
   scale_color_manual(values = c('tan1', 'lightblue3')) +
   theme_bw() +
   theme(legend.position = 'none', 
-        panel.grid = element_blank(), 
-        text = element_text(family = 'Times New Roman'))
+        panel.grid = element_blank())
 
 plot_pollen_hive <- 
   pollen_hives |> 
@@ -2933,8 +2958,7 @@ plot_pollen_hive <-
   geom_hline(yintercept = c(112, 274), linetype = 2, color = 'red') +
   theme_bw() +
   theme(legend.position = 'none', 
-        panel.grid = element_blank(), 
-        text = element_text(family = 'Times New Roman'))
+        panel.grid = element_blank())
 
 plot_grid(plot_vis_hive, plot_pollen_hive, ncol = 2)
 
@@ -3050,8 +3074,7 @@ ggplot() +
   labs(y = expression('Production'~'(t ha'^-1~')'), 
        x = expression('Hive density (ha'^-1~')')) +
   theme(legend.position = 'none', 
-        panel.grid = element_blank(), 
-        text = element_text(family = 'Times New Roman'))
+        panel.grid = element_blank())
 ```
 
 
@@ -3196,16 +3219,14 @@ sim_t_ha <-
              shape = 3,
              size = 0.2) +
   geom_label(data = lab, aes(x, y), 
-             label = lab$lab, fill = c('tan1', 'lightblue'), 
-             family = 'Times New Roman', size = 3, 
+             label = lab$lab, fill = c('tan1', 'lightblue'), size = 3, 
              alpha = 0.7) +
   scale_x_continuous(breaks = seq(1, 20, by = 2)) +
   theme_bw() +
   labs(y = expression('Production'~'(t ha'^-1~')'), 
        x = expression('Hive density (ha'^-1~')')) +
   theme(legend.position = 'non', 
-        panel.grid = element_blank(), 
-        text = element_text(family = 'Times New Roman'))
+        panel.grid = element_blank())
 
 knee_hq$type <- 'High quality'
 knee_lq$type <- 'Low quality'
@@ -3228,8 +3249,7 @@ knee_plot1 <-
   geom_vline(xintercept = knee %$% aggregate(x ~ type, FUN = median)$x, 
              linetype = 3, linewidth = 0.8,
              color = c('tan1', 'lightblue')) +
-  geom_label(data = lab, aes(x, y), label = lab$label, 
-             family = 'Times New Roman', size = 2.5, 
+  geom_label(data = lab, aes(x, y), label = lab$label, size = 2.5, 
              label.padding = unit(0.15, 'lines')) +
   scale_color_manual(values = c('tan1', 'lightblue')) +
   scale_fill_manual(values = c('tan1', 'lightblue')) +
@@ -3237,8 +3257,7 @@ knee_plot1 <-
   labs(x = expression('Optimal hive density (hives ha'^-1~')'), y = 'Density') +
   theme_bw() +
   theme(legend.position = 'none', 
-        panel.grid = element_blank(), 
-        text = element_text(family = 'Times New Roman'))
+        panel.grid = element_blank())
 
 lab <- 
   knee |> 
@@ -3258,16 +3277,14 @@ knee_plot2 <-
   geom_vline(xintercept = knee %$% aggregate(y ~ type, FUN = median)$y, 
              linetype = 3, linewidth = 0.8,
              color = c('tan1', 'lightblue')) +
-  geom_label(data = lab, aes(x, y), label = lab$label,
-             family = 'Times New Roman', size = 2.5,
+  geom_label(data = lab, aes(x, y), label = lab$label, size = 2.5,
              label.padding = unit(0.15, 'lines')) +
   scale_color_manual(values = c('tan1', 'lightblue')) +
   scale_fill_manual(values = c('tan1', 'lightblue')) +
   labs(x = expression('Production (t ha'^-1~')'), y = " ") +
   theme_bw() +
   theme(legend.position = 'none', 
-        panel.grid = element_blank(), 
-        text = element_text(family = 'Times New Roman'))
+        panel.grid = element_blank())
 
 contrast <- 
   tibble(t = knee[knee$type == 'High quality', ]$y -
@@ -3288,12 +3305,10 @@ contrast_t <-
              linetype = 3, linewidth = 0.8,
              color = 'gray') +
   labs(x = expression('Contrast of production (t ha'^-1~')'), y = " ") +
-  geom_label(data = lab, aes(x, y), label = lab$lab,
-             family = 'Times New Roman', size = 2.5,
+  geom_label(data = lab, aes(x, y), label = lab$lab, size = 2.5,
              label.padding = unit(0.15, 'lines')) +
   theme_bw() +
-  theme(panel.grid = element_blank(), 
-        text = element_text(family = 'Times New Roman'))
+  theme(panel.grid = element_blank())
 
 lab <- 
   tibble(lab = paste(round(median(contrast$hives), 1), 'hives per ha'), 
@@ -3309,27 +3324,22 @@ contrast_h <-
              color = 'gray') +
   labs(x = expression('Contrast optimal hive density (hives ha'^-1~')'), 
        y = "Density") +
-  geom_label(data = lab, aes(x, y), label = lab$lab,
-             family = 'Times New Roman', size = 2.5,
+  geom_label(data = lab, aes(x, y), label = lab$lab, size = 2.5,
              label.padding = unit(0.15, 'lines')) +
   theme_bw() +
-  theme(panel.grid = element_blank(), 
-        text = element_text(family = 'Times New Roman'))
+  theme(panel.grid = element_blank(), )
 
 
 plot_grid(plot_grid(NULL, sim_t_ha, NULL, 
-                    labels = c('', '(a)', ''), 
-                    label_fontfamily = 'Times New Roman', 
+                    labels = c('', '(a)', ''),  
                     label_size = 12, 
                     rel_widths = c(0.15, 1, 0.15), 
                     nrow = 1), 
           plot_grid(knee_plot1, knee_plot2, ncol = 2, 
                     labels = c('(b)', '(c)'), 
-                    label_fontfamily = 'Times New Roman', 
                     label_size = 12),
           plot_grid(contrast_h, contrast_t, ncol = 2, 
                     labels = c('(d)', '(e)'), 
-                    label_fontfamily = 'Times New Roman', 
                     label_size = 12),
           ncol = 1)
 
@@ -3359,8 +3369,7 @@ cost_poll1 <-
   #facet_wrap(~ price_type) +
   theme_bw() +
   theme(legend.position = 'none', 
-        panel.grid = element_blank(), 
-        text = element_text(family = 'Times New Roman'))
+        panel.grid = element_blank())
 
 knee %$% aggregate(cost_geslin ~ type, FUN = 
                      function(x) quantile(x, c(0, 0.5, 1)))
@@ -3425,8 +3434,7 @@ total_gains <-
   #facet_wrap(~ price_type) +
   theme_bw() +
   theme(legend.position = 'none', 
-        panel.grid = element_blank(), 
-        text = element_text(family = 'Times New Roman'))
+        panel.grid = element_blank())
 
 lab <- 
   tibble(lab = paste(paste(round(median(boot_plus$hives_dif), 1), 
@@ -3445,20 +3453,17 @@ contrast_hives <-
   labs(x = 'Hive density increase for equating\n low to high-quality hives', 
        y = "Density") +
   geom_label(data = lab, aes(x, y), label = lab$lab,
-             family = 'Times New Roman', size = 2.8,
+             size = 2.8,
              label.padding = unit(0.15, 'lines')) +
   theme_bw() +
-  theme(panel.grid = element_blank(), 
-        text = element_text(family = 'Times New Roman'))
+  theme(panel.grid = element_blank())
 
 plot_grid(plot_grid(cost_poll1, total_gains, 
                     labels = c('(a)', '(b)'),
-                    label_fontfamily = 'Times New Roman', 
                     nrow = 1), 
           plot_grid(NULL, contrast_hives, NULL, 
                     rel_widths = c(0.52, 1, 0.52), 
                     labels = c('', '(c)', ''), 
-                    label_fontfamily = 'Times New Roman', 
                     nrow = 1), nrow = 2)
 
 ```
