@@ -1,6 +1,6 @@
 ---
 title: "How much is enough? Optimizing beehive stocking densities to maximize the production of a pollinator-dependent crop"
-subtitle: 'Appendix S1. Journal: Ecological Applications'
+subtitle: 'Appendix S1. Journal: Ecological Modelling'
 author: "Andrés F. Ramírez-Mejía"
 format:
   pdf: 
